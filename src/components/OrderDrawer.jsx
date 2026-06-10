@@ -2,30 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, Minus, Plus, ChevronDown, Loader2 } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { supabase } from '../lib/supabase'
-
-function buildWhatsAppMessage(order) {
-  const orderNum = `#${String(order.id).slice(-6).toUpperCase()}`
-  const itemLines = order.items
-    .map(i => `  • ${i.quantity}× ${i.name} — GH₵${(i.price * i.quantity).toFixed(2)}`)
-    .join('\n')
-
-  return encodeURIComponent(
-    `🔔 *NEW ORDER ${orderNum}*\n\n` +
-    `👤 *Customer:* ${order.customer_name}\n` +
-    `📍 *Location:* ${order.delivery_location}\n` +
-    `📱 *MoMo:* ${order.momo_number}\n\n` +
-    `🍽️ *Items:*\n${itemLines}\n\n` +
-    `💰 *Total Paid: GH₵${Number(order.total_amount).toFixed(2)}*\n\n` +
-    `✅ Payment confirmed via MoMo. Please prepare order!`
-  )
-}
-
-function notifyOwnerWhatsApp(order) {
-  const owner = process.env.NEXT_PUBLIC_OWNER_WHATSAPP
-  if (!owner) return
-  const msg = buildWhatsAppMessage(order)
-  window.open(`https://wa.me/${owner}?text=${msg}`, '_blank', 'noopener,noreferrer')
-}
+import { notifyOwner } from '../lib/whatsapp'
 
 const DELIVERY_LOCATIONS = [
   'Ayigya',
@@ -135,7 +112,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       clearCart()
       closeDrawer()
       onPaymentSuccess(orderData)
-      notifyOwnerWhatsApp(orderData)
+      notifyOwner(orderData)
     }
 
     function handleFailed() {

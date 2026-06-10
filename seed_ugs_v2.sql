@@ -104,6 +104,29 @@ create policy "Customers can read own order"
 -- Enable realtime for order status updates
 alter publication supabase_realtime add table orders;
 
+-- ─── REVIEWS ─────────────────────────────────────────────────
+create table if not exists reviews (
+  id           bigserial primary key,
+  customer_name text not null,
+  rating        int  not null check (rating between 1 and 5),
+  comment       text,
+  is_approved   boolean not null default true,
+  created_at    timestamptz default now()
+);
+
+alter table reviews enable row level security;
+
+create policy "Anyone can submit a review"
+  on reviews for insert with check (true);
+
+create policy "Anyone can read approved reviews"
+  on reviews for select using (is_approved = true);
+
+create policy "Service role can manage reviews"
+  on reviews for all using (auth.role() = 'service_role');
+
+alter publication supabase_realtime add table reviews;
+
 -- ─── SEED DATA ───────────────────────────────────────────────
 
 insert into categories (id, name, sort_order) values

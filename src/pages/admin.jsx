@@ -1,6 +1,7 @@
 import Head from 'next/head'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { notifyCustomer } from '../lib/whatsapp'
 import {
   ShoppingBag, CheckCircle2, Clock, XCircle,
   TrendingUp, RefreshCw, LogOut, ChevronDown, Eye
@@ -225,6 +226,13 @@ export default function AdminPage() {
 
   async function handleStatusChange(orderId, newStatus) {
     await supabase.from('orders').update({ status: newStatus }).eq('id', orderId)
+
+    // Notify the customer on key status changes
+    const updatedOrder = { ...selectedOrder, status: newStatus }
+    if (['preparing', 'ready', 'delivered', 'cancelled'].includes(newStatus)) {
+      notifyCustomer(updatedOrder, newStatus)
+    }
+
     setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null)
     fetchOrders()
   }
