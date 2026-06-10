@@ -83,9 +83,17 @@ function ReviewCard({ review }) {
   )
 }
 
+function formatMoMo(raw) {
+  const digits = raw.replace(/\D/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0,3)} ${digits.slice(3)}`
+  return `${digits.slice(0,3)} ${digits.slice(3,6)} ${digits.slice(6)}`
+}
+
 // ── Review Form ───────────────────────────────────────────────
 function ReviewForm({ onSubmitted }) {
   const [name,    setName]    = useState('')
+  const [momo,    setMomo]    = useState('')
   const [rating,  setRating]  = useState(0)
   const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(false)
@@ -94,21 +102,43 @@ function ReviewForm({ onSubmitted }) {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    if (!name.trim())   return setError('Please enter your name.')
-    if (rating === 0)   return setError('Please select a star rating.')
+    const phone = momo.replace(/\s/g, '')
+    if (!name.trim())        return setError('Please enter your name.')
+    if (phone.length !== 10) return setError('Enter your 10-digit MoMo number to verify.')
+    if (rating === 0)        return setError('Please select a star rating.')
 
     setLoading(true)
+
+    // Check for existing review from this number
+    const { data: existing } = await supabase
+      .from('reviews')
+      .select('id')
+      .eq('momo_number', phone)
+      .maybeSingle()
+
+    if (existing) {
+      setError('You have already submitted a review. Thank you!')
+      setLoading(false)
+      return
+    }
+
     const { error: dbErr } = await supabase
       .from('reviews')
-      .insert({ customer_name: name.trim(), rating, comment: comment.trim() || null })
+      .insert({ customer_name: name.trim(), momo_number: phone, rating, comment: comment.trim() || null })
 
     if (dbErr) {
-      setError('Could not submit review. Please try again.')
+      // Catch unique constraint violation gracefully
+      if (dbErr.code === '23505') {
+        setError('You have already submitted a review. Thank you!')
+      } else {
+        setError('Could not submit review. Please try again.')
+      }
       setLoading(false)
       return
     }
 
     setName('')
+    setMomo('')
     setRating(0)
     setComment('')
     setLoading(false)
@@ -129,6 +159,20 @@ function ReviewForm({ onSubmitted }) {
           onChange={e => setName(e.target.value)}
           placeholder="e.g. Ama Owusu"
           className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+          MoMo Number <span className="normal-case font-normal text-gray-400">(to verify, not shown publicly)</span>
+        </label>
+        <input
+          type="tel"
+          inputMode="numeric"
+          value={momo}
+          onChange={e => setMomo(formatMoMo(e.target.value))}
+          placeholder="024 XXX XXXX"
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold tracking-widest outline-none focus:border-brand-orange transition-colors"
         />
       </div>
 

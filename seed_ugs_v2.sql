@@ -106,12 +106,14 @@ alter publication supabase_realtime add table orders;
 
 -- ─── REVIEWS ─────────────────────────────────────────────────
 create table if not exists reviews (
-  id           bigserial primary key,
+  id            bigserial primary key,
   customer_name text not null,
+  momo_number   text not null,           -- used for deduplication only, not shown publicly
   rating        int  not null check (rating between 1 and 5),
   comment       text,
   is_approved   boolean not null default true,
-  created_at    timestamptz default now()
+  created_at    timestamptz default now(),
+  unique (momo_number)                   -- one review per MoMo number
 );
 
 alter table reviews enable row level security;

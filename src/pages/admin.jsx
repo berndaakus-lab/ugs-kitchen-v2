@@ -3,8 +3,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { notifyCustomer } from '../lib/whatsapp'
 import {
-  ShoppingBag, CheckCircle2, Clock, XCircle,
-  TrendingUp, RefreshCw, LogOut, ChevronDown, Eye
+  ShoppingBag, Clock, XCircle,
+  TrendingUp, RefreshCw, LogOut, Eye,
+  Star, CheckCircle2, Trash2, MessageSquare
 } from 'lucide-react'
 
 const STATUS_STYLES = {
@@ -186,12 +187,15 @@ function Row({ label, value, bold }) {
 // ── Main Admin Dashboard ──────────────────────────────────────
 export default function AdminPage() {
   const [authed,       setAuthed]       = useState(false)
+  const [activeTab,    setActiveTab]    = useState('orders') // 'orders' | 'reviews'
   const [orders,       setOrders]       = useState([])
   const [loading,      setLoading]      = useState(true)
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [refreshing,   setRefreshing]   = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [reviews,      setReviews]      = useState([])
+  const [reviewsLoading, setReviewsLoading] = useState(true)
 
   const fetchOrders = useCallback(async () => {
     setRefreshing(true)
@@ -210,19 +214,40 @@ export default function AdminPage() {
     setRefreshing(false)
   }, [selectedDate])
 
-  useEffect(() => {
-    if (authed) fetchOrders()
-  }, [authed, fetchOrders])
+  const fetchReviews = useCallback(async () => {
+    const { data } = await supabase
+      .from('reviews')
+      .select('id, customer_name, rating, comment, is_approved, created_at')
+      .order('created_at', { ascending: false })
+    setReviews(data ?? [])
+    setReviewsLoading(false)
+  }, [])
 
-  // Realtime — new orders appear instantly
+  useEffect(() => {
+    if (authed) { fetchOrders(); fetchReviews() }
+  }, [authed, fetchOrders, fetchReviews])
+
+  // Realtime — new orders and reviews appear instantly
   useEffect(() => {
     if (!authed) return
     const channel = supabase
-      .channel('admin-orders')
+      .channel('admin-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchOrders)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, fetchReviews)
       .subscribe()
     return () => channel.unsubscribe()
-  }, [authed, fetchOrders])
+  }, [authed, fetchOrders, fetchReviews])
+
+  async function handleApproveReview(id, current) {
+    await supabase.from('reviews').update({ is_approved: !current }).eq('id', id)
+    fetchReviews()
+  }
+
+  async function handleDeleteReview(id) {
+    if (!confirm('Delete this review permanently?')) return
+    await supabase.from('reviews').delete().eq('id', id)
+    fetchReviews()
+  }
 
   async function handleStatusChange(orderId, newStatus) {
     await supabase.from('orders').update({ status: newStatus }).eq('id', orderId)
@@ -267,7 +292,7 @@ export default function AdminPage() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={fetchOrders}
+                onClick={() => activeTab === 'orders' ? fetchOrders() : fetchReviews()}
                 className={`w-9 h-9 rounded-xl bg-brand-muted flex items-center justify-center ${refreshing ? 'animate-spin' : ''}`}
               >
                 <RefreshCw size={16} className="text-brand-dark" />
@@ -282,7 +307,95 @@ export default function AdminPage() {
           </div>
         </header>
 
+        {/* Tab switcher */}
+        <div className="max-w-lg mx-auto px-4 pt-3 flex gap-2">
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
+              ${activeTab === 'orders' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+          >
+            <ShoppingBag size={15} /> Orders
+          </button>
+          <button
+            onClick={() => setActiveTab('reviews')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
+              ${activeTab === 'reviews' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+          >
+            <MessageSquare size={15} /> Reviews
+            {reviews.filter(r => r.is_approved).length > 0 && (
+              <span className="bg-brand-orange text-white text-[10px] font-extrabold rounded-full w-4 h-4 flex items-center justify-center">
+                {reviews.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         <div className="max-w-lg mx-auto px-4 py-5 space-y-5">
+
+          {/* ── REVIEWS TAB ─────────────────────────────────── */}
+          {activeTab === 'reviews' && (
+            <div className="space-y-3">
+              {reviewsLoading ? (
+                [...Array(3)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl h-24 animate-pulse" />
+                ))
+              ) : reviews.length === 0 ? (
+                <div className="text-center py-16">
+                  <Star size={40} className="text-gray-200 mx-auto mb-3" />
+                  <p className="text-gray-400 font-semibold">No reviews yet</p>
+                </div>
+              ) : reviews.map(review => (
+                <div key={review.id} className="bg-white rounded-2xl p-4 border border-brand-muted shadow-sm">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-bold text-brand-dark text-sm">{review.customer_name}</p>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${review.is_approved ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                          {review.is_approved ? '✅ Visible' : '⏸ Hidden'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {[1,2,3,4,5].map(s => (
+                          <Star key={s} size={12}
+                            fill={review.rating >= s ? '#E85D04' : 'none'}
+                            stroke={review.rating >= s ? '#E85D04' : '#D1D5DB'}
+                            strokeWidth={1.5}
+                          />
+                        ))}
+                        <span className="text-xs text-gray-400 ml-1">
+                          {new Date(review.created_at).toLocaleDateString('en-GH', { day:'numeric', month:'short', year:'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleApproveReview(review.id, review.is_approved)}
+                        title={review.is_approved ? 'Hide review' : 'Approve review'}
+                        className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center active:bg-gray-200"
+                      >
+                        <CheckCircle2 size={15} className={review.is_approved ? 'text-green-500' : 'text-gray-400'} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteReview(review.id)}
+                        title="Delete review"
+                        className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center active:bg-red-100"
+                      >
+                        <Trash2 size={15} className="text-red-400" />
+                      </button>
+                    </div>
+                  </div>
+                  {review.comment && (
+                    <p className="text-sm text-gray-600 leading-relaxed bg-brand-cream rounded-xl px-3 py-2">
+                      &ldquo;{review.comment}&rdquo;
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── ORDERS TAB ──────────────────────────────────── */}
+          {activeTab === 'orders' && <>
 
           {/* Date picker */}
           <div className="flex items-center gap-3">
@@ -400,6 +513,9 @@ export default function AdminPage() {
               ))}
             </div>
           )}
+
+          </> /* end orders tab */}
+
         </div>
       </div>
 
