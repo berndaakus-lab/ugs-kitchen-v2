@@ -1,5 +1,6 @@
 import Head from 'next/head'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/router'
 import { ShoppingBag, MapPin, ChevronDown, User, LogOut, History } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
@@ -19,12 +20,34 @@ export default function Home() {
   const [categories,  setCategories]  = useState([])
   const [loading,     setLoading]     = useState(true)
   const [paidOrder,   setPaidOrder]   = useState(null)
-  const [showAuth,    setShowAuth]    = useState(false)
+  const [showAuth,     setShowAuth]     = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const userMenuRef = useRef(null)
+  const router = useRouter()
 
   const { totalItems, openDrawer, clearCart } = useCart()
   const { currentBranch, switchBranch, loading: branchLoading } = useBranch()
   const { customer, isLoggedIn, signOut } = useAuth()
+
+  // Auto-open sign-in modal when redirected from /orders as a guest
+  useEffect(() => {
+    if (router.query.signin === '1') {
+      setShowAuth(true)
+      router.replace('/', undefined, { shallow: true })
+    }
+  }, [router.query.signin])
+
+  // Close user dropdown when clicking anywhere outside it
+  useEffect(() => {
+    if (!showUserMenu) return
+    function handleClickOutside(e) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setShowUserMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showUserMenu])
 
   // Reload menu whenever branch changes
   useEffect(() => {
@@ -96,7 +119,7 @@ export default function Home() {
             <div className="flex items-center gap-2">
               {/* Auth button */}
               {isLoggedIn ? (
-                <div className="relative">
+                <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setShowUserMenu(v => !v)}
                     className="flex items-center gap-1.5 bg-brand-muted text-brand-dark px-3 py-2 rounded-xl font-bold text-sm"
@@ -193,11 +216,6 @@ export default function Home() {
 
       {/* Auth modal */}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
-
-      {/* Close user dropdown when clicking outside */}
-      {showUserMenu && (
-        <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
-      )}
     </>
   )
 }

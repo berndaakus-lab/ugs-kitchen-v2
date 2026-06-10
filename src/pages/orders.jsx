@@ -39,12 +39,16 @@ export default function OrdersPage() {
   const [reordered, setReordered] = useState(null)
 
   useEffect(() => {
+    // Wait until localStorage session has been read before deciding anything
     if (authLoading) return
+
     if (!isLoggedIn) {
-      router.replace('/')
+      // Not logged in after auth is resolved → go home and open sign-in
+      router.replace('/?signin=1')
       return
     }
     loadOrders()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, isLoggedIn])
 
   async function loadOrders() {
@@ -72,13 +76,18 @@ export default function OrdersPage() {
     setTimeout(() => router.push('/'), 600)
   }
 
-  if (authLoading || loading) {
+  // Show spinner while auth session is being read from localStorage,
+  // or while orders are loading. Never redirect until authLoading is false.
+  if (authLoading || (isLoggedIn && loading)) {
     return (
       <div className="min-h-screen bg-brand-cream flex items-center justify-center">
         <Loader2 size={36} className="animate-spin text-brand-orange" />
       </div>
     )
   }
+
+  // Auth resolved and not logged in — redirect handled by useEffect above
+  if (!isLoggedIn) return null
 
   return (
     <>
