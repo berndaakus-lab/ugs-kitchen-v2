@@ -10,6 +10,7 @@ drop table if exists orders     cascade;
 drop table if exists menu_items cascade;
 drop table if exists categories cascade;
 drop table if exists branches   cascade;
+drop table if exists customers  cascade;
 
 -- Drop storage policies if bucket already exists
 drop policy if exists "Public can view menu images"  on storage.objects;
@@ -39,6 +40,24 @@ create policy "Public can read active branches"
   on branches for select using (is_active = true);
 create policy "Service role can manage branches"
   on branches for all using (auth.role() = 'service_role');
+
+-- ─── CUSTOMERS ───────────────────────────────────────────────
+-- Auto-created silently when a customer places their first order
+create table if not exists customers (
+  id         uuid primary key default uuid_generate_v4(),
+  name       text not null,
+  phone      text not null unique,  -- Ghana format: 0244XXXXXX
+  created_at timestamptz default now()
+);
+
+alter table customers enable row level security;
+-- Anyone (anon key) can upsert their own record by phone
+create policy "Anyone can upsert customers"
+  on customers for insert with check (true);
+create policy "Anyone can update customers"
+  on customers for update using (true) with check (true);
+create policy "Anyone can read customers"
+  on customers for select using (true);
 
 -- ─── STORAGE BUCKET FOR MENU IMAGES ─────────────────────────
 -- Creates a public bucket called "menu-images"
@@ -105,6 +124,7 @@ create table if not exists orders (
   payment_channel      text,
   paid_at              timestamptz,
   branch_id            uuid references branches(id) on delete set null,
+  customer_id          uuid references customers(id) on delete set null,
   notes                text,
   created_at           timestamptz default now()
 );

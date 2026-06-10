@@ -1,24 +1,30 @@
 import Head from 'next/head'
 import { useState, useEffect } from 'react'
-import { ShoppingBag, MapPin, ChevronDown } from 'lucide-react'
+import { ShoppingBag, MapPin, ChevronDown, User, LogOut, History } from 'lucide-react'
+import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import MenuGrid from '../components/MenuGrid'
 import OrderDrawer from '../components/OrderDrawer'
 import PayStatus from '../components/PayStatus'
 import ReviewSection from '../components/ReviewSection'
 import BranchSelector from '../components/BranchSelector'
+import AuthModal from '../components/AuthModal'
 import Footer from '../components/Footer'
 import { useCart } from '../context/CartContext'
 import { useBranch } from '../context/BranchContext'
+import { useAuth } from '../context/AuthContext'
 
 export default function Home() {
-  const [menuItems,  setMenuItems]  = useState([])
-  const [categories, setCategories] = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [paidOrder,  setPaidOrder]  = useState(null)
+  const [menuItems,   setMenuItems]   = useState([])
+  const [categories,  setCategories]  = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [paidOrder,   setPaidOrder]   = useState(null)
+  const [showAuth,    setShowAuth]    = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
 
   const { totalItems, openDrawer, clearCart } = useCart()
   const { currentBranch, switchBranch, loading: branchLoading } = useBranch()
+  const { customer, isLoggedIn, signOut } = useAuth()
 
   // Reload menu whenever branch changes
   useEffect(() => {
@@ -87,15 +93,58 @@ export default function Home() {
               </div>
             </div>
 
-            {totalItems > 0 && (
-              <button
-                onClick={openDrawer}
-                className="flex items-center gap-1.5 bg-brand-dark text-white px-3 py-2 rounded-xl font-bold text-sm"
-              >
-                <ShoppingBag size={16} />
-                <span>{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {/* Auth button */}
+              {isLoggedIn ? (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowUserMenu(v => !v)}
+                    className="flex items-center gap-1.5 bg-brand-muted text-brand-dark px-3 py-2 rounded-xl font-bold text-sm"
+                  >
+                    <User size={15} />
+                    <span className="max-w-[80px] truncate">{customer.name.split(' ')[0]}</span>
+                  </button>
+                  {showUserMenu && (
+                    <div className="absolute right-0 top-full mt-1 bg-white rounded-2xl shadow-xl border border-brand-muted overflow-hidden z-50 w-44">
+                      <Link
+                        href="/orders"
+                        className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand-muted"
+                        onClick={() => setShowUserMenu(false)}
+                      >
+                        <History size={15} />
+                        My Orders
+                      </Link>
+                      <button
+                        onClick={() => { signOut(); setShowUserMenu(false) }}
+                        className="flex items-center gap-2 w-full px-4 py-3 text-sm font-semibold text-red-500 hover:bg-red-50 border-t border-brand-muted"
+                      >
+                        <LogOut size={15} />
+                        Sign Out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAuth(true)}
+                  className="flex items-center gap-1 text-brand-orange font-bold text-sm px-2 py-1.5 rounded-xl hover:bg-brand-muted transition-colors"
+                >
+                  <User size={15} />
+                  Sign In
+                </button>
+              )}
+
+              {/* Cart */}
+              {totalItems > 0 && (
+                <button
+                  onClick={openDrawer}
+                  className="flex items-center gap-1.5 bg-brand-dark text-white px-3 py-2 rounded-xl font-bold text-sm"
+                >
+                  <ShoppingBag size={16} />
+                  <span>{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
+                </button>
+              )}
+            </div>
           </div>
         </header>
 
@@ -140,6 +189,14 @@ export default function Home() {
       {/* Success overlay */}
       {paidOrder && (
         <PayStatus order={paidOrder} onDismiss={() => setPaidOrder(null)} />
+      )}
+
+      {/* Auth modal */}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+
+      {/* Close user dropdown when clicking outside */}
+      {showUserMenu && (
+        <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
       )}
     </>
   )

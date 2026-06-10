@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, Minus, Plus, ChevronDown, Loader2 } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { useBranch } from '../context/BranchContext'
+import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { notifyOwner } from '../lib/whatsapp'
 
@@ -19,6 +20,7 @@ function formatMoMo(raw) {
 export default function OrderDrawer({ onPaymentSuccess }) {
   const { items, totalAmount, isOpen, closeDrawer, addItem, decrement, clearCart } = useCart()
   const { currentBranch } = useBranch()
+  const { silentSignIn } = useAuth()
 
   // Delivery locations come from the branch record (JSONB array)
   const deliveryLocations = currentBranch?.delivery_locations ?? []
@@ -108,6 +110,8 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       clearInterval(pollInterval)
       clearTimeout(timeoutId)
       setLoading(false)
+      // Silently create/link customer account using already-collected name + MoMo number
+      silentSignIn(orderData.customer_name, orderData.momo_number)
       clearCart()
       closeDrawer()
       onPaymentSuccess(orderData)
