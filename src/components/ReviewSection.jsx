@@ -109,30 +109,16 @@ function ReviewForm({ onSubmitted }) {
 
     setLoading(true)
 
-    // Check for existing review from this number
-    const { data: existing } = await supabase
-      .from('reviews')
-      .select('id')
-      .eq('momo_number', phone)
-      .maybeSingle()
-
-    if (existing) {
-      setError('You have already submitted a review. Thank you!')
-      setLoading(false)
-      return
-    }
-
+    // Upsert — insert new or update existing review for this number
     const { error: dbErr } = await supabase
       .from('reviews')
-      .insert({ customer_name: name.trim(), momo_number: phone, rating, comment: comment.trim() || null })
+      .upsert(
+        { customer_name: name.trim(), momo_number: phone, rating, comment: comment.trim() || null, is_approved: true },
+        { onConflict: 'momo_number' }
+      )
 
     if (dbErr) {
-      // Catch unique constraint violation gracefully
-      if (dbErr.code === '23505') {
-        setError('You have already submitted a review. Thank you!')
-      } else {
-        setError('Could not submit review. Please try again.')
-      }
+      setError('Could not submit review. Please try again.')
       setLoading(false)
       return
     }

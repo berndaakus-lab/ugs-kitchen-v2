@@ -61,29 +61,16 @@ export default function ReviewPage() {
 
     setLoading(true)
 
-    // Check for existing review
-    const { data: existing } = await supabase
-      .from('reviews')
-      .select('id')
-      .eq('momo_number', phone)
-      .maybeSingle()
-
-    if (existing) {
-      setError('You have already left a review. Thank you! 🙏')
-      setLoading(false)
-      return
-    }
-
+    // Upsert — updates existing review if same number, inserts if new
     const { error: dbErr } = await supabase
       .from('reviews')
-      .insert({ customer_name: name.trim(), momo_number: phone, rating, comment: comment.trim() || null })
+      .upsert(
+        { customer_name: name.trim(), momo_number: phone, rating, comment: comment.trim() || null, is_approved: true },
+        { onConflict: 'momo_number' }
+      )
 
     if (dbErr) {
-      if (dbErr.code === '23505') {
-        setError('You have already left a review. Thank you! 🙏')
-      } else {
-        setError('Could not submit. Please try again.')
-      }
+      setError('Could not submit. Please try again.')
       setLoading(false)
       return
     }
@@ -107,7 +94,7 @@ export default function ReviewPage() {
               Thank You! 🙏
             </h1>
             <p className="text-gray-500 text-sm mb-6">
-              Your review has been submitted. We truly appreciate your feedback — it helps us serve you better!
+              Your review has been saved. We truly appreciate your feedback — it helps us serve you better!
             </p>
             <div className="flex gap-1 justify-center mb-6">
               {[1,2,3,4,5].map(s => (
