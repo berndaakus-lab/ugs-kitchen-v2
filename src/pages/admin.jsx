@@ -138,6 +138,16 @@ function OrderModal({ order, onClose, onStatusChange }) {
           <Row label="Total"    value={formatGHS(order.total_amount)} bold />
         </div>
 
+        {/* Special instructions */}
+        {order.notes && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl px-4 py-3 mb-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-yellow-600 mb-1">
+              ⚠️ Special Instructions
+            </p>
+            <p className="text-sm text-yellow-900 font-semibold">{order.notes}</p>
+          </div>
+        )}
+
         {/* Items */}
         <div className="space-y-2 mb-5">
           <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Items</p>

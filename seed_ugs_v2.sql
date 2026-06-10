@@ -105,6 +105,7 @@ create table if not exists orders (
   payment_channel      text,
   paid_at              timestamptz,
   branch_id            uuid references branches(id) on delete set null,
+  notes                text,
   created_at           timestamptz default now()
 );
 

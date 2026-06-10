@@ -26,6 +26,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   const [name, setName]         = useState('')
   const [location, setLocation] = useState('')
   const [momoNum, setMomoNum]   = useState('')
+  const [notes, setNotes]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
   const drawerRef               = useRef(null)
@@ -67,6 +68,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
           total_amount:      totalAmount,
           status:            'pending',
           branch_id:         currentBranch?.id ?? null,
+          notes:             notes.trim() || null,
         })
         .select()
         .single()
@@ -293,6 +295,24 @@ export default function OrderDrawer({ onPaymentSuccess }) {
               />
               <p className="text-[11px] text-gray-400 mt-1">
                 MTN, Vodafone, or AirtelTigo MoMo number
+              </p>
+            </div>
+
+            {/* Special instructions */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                Special Instructions <span className="normal-case font-normal text-gray-400">(optional)</span>
+              </label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="e.g. No onions, extra pepper, less rice…"
+                rows={2}
+                maxLength={200}
+                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-brand-orange transition-colors resize-none"
+              />
+              <p className="text-[11px] text-gray-400 mt-1 text-right">
+                {notes.length}/200
               </p>
             </div>
           </div>
