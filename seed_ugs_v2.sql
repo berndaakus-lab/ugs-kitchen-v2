@@ -3,6 +3,24 @@
 -- Run this in the Supabase SQL Editor
 -- Safe to run from scratch — drops everything and rebuilds clean
 -- ============================================================
+--
+-- ⚠️  IF YOU WANT TO KEEP EXISTING DATA (orders, branches, etc.)
+-- run only these lines instead of the full script:
+--
+--   alter table orders add column if not exists reminded_at timestamptz;
+--   alter table orders add column if not exists customer_id uuid references customers(id) on delete set null;
+--   create table if not exists customers (
+--     id uuid primary key default uuid_generate_v4(),
+--     name text not null,
+--     phone text not null unique,
+--     created_at timestamptz default now()
+--   );
+--   alter table customers enable row level security;
+--   create policy "Anyone can upsert customers" on customers for insert with check (true);
+--   create policy "Anyone can update customers" on customers for update using (true) with check (true);
+--   create policy "Anyone can read customers"   on customers for select using (true);
+--
+-- ============================================================
 
 -- ─── DROP EXISTING TABLES (order matters due to foreign keys) ─
 drop table if exists reviews    cascade;
@@ -126,6 +144,7 @@ create table if not exists orders (
   branch_id            uuid references branches(id) on delete set null,
   customer_id          uuid references customers(id) on delete set null,
   notes                text,
+  reminded_at          timestamptz,   -- set when 30-min reminder SMS is sent (prevents duplicates)
   created_at           timestamptz default now()
 );
 

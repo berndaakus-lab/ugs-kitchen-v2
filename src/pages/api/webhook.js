@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
+import { sendSMS, msgOrderConfirmed, msgOwnerNewOrder } from '../../lib/sms'
 
 // Disable Next.js body parsing — we need raw body for HMAC verification
 export const config = { api: { bodyParser: false } }
@@ -73,6 +74,23 @@ export default async function handler(req, res) {
     }
 
     console.log(`[webhook] Order ${orderId} marked as PAID (ref: ${reference})`)
+
+    // Fetch full order to build SMS messages
+    const { data: order } = await supabase
+      .from('orders')
+      .select('*, branches(name, phone)')
+      .eq('id', orderId)
+      .single()
+
+    if (order) {
+      const ownerPhone = order.branches?.phone || process.env.OWNER_PHONE
+      // SMS to owner (new confirmed order alert)
+      if (ownerPhone) {
+        sendSMS({ to: ownerPhone, message: msgOwnerNewOrder(order, order.branches) })
+      }
+      // SMS to customer (confirmation + 30-min heads-up)
+      sendSMS({ to: order.momo_number, message: msgOrderConfirmed(order) })
+    }
   }
 
   if (eventType === 'charge.failed' || eventType === 'transfer.failed') {

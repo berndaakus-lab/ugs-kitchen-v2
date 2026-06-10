@@ -1,34 +1,108 @@
-import { CheckCircle2, UtensilsCrossed, MessageCircle } from 'lucide-react'
-import { notifyOwner } from '../lib/whatsapp'
+import { useEffect, useState } from 'react'
+import { CheckCircle2, UtensilsCrossed, Clock } from 'lucide-react'
+
+const COUNTDOWN_SECS = 30 * 60 // 30 minutes
 
 function formatGHS(amount) {
   return `GH₵ ${Number(amount).toFixed(2)}`
 }
 
+function formatTime(secs) {
+  const m = Math.floor(secs / 60).toString().padStart(2, '0')
+  const s = (secs % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
+}
+
 export default function PayStatus({ order, onDismiss }) {
+  const [remaining, setRemaining] = useState(COUNTDOWN_SECS)
+  const [done,      setDone]      = useState(false)
+
+  useEffect(() => {
+    if (!order) return
+    const interval = setInterval(() => {
+      setRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          setDone(true)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [order])
+
   if (!order) return null
+
+  // Progress 0–100 for the ring
+  const progress = Math.round(((COUNTDOWN_SECS - remaining) / COUNTDOWN_SECS) * 100)
+  const circumference = 2 * Math.PI * 38 // r=38
+  const dash = (progress / 100) * circumference
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/95 px-6 animate-fade-in overflow-y-auto py-6">
-      <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
 
-        {/* Success icon */}
-        <div className="flex justify-center mb-4">
-          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
-            <CheckCircle2 size={44} className="text-green-500" strokeWidth={2} />
+        {/* Success header */}
+        <div className="text-center mb-5">
+          <div className="flex justify-center mb-3">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+              <CheckCircle2 size={36} className="text-green-500" strokeWidth={2} />
+            </div>
           </div>
+          <h1 className="text-2xl font-extrabold text-brand-dark">Order Confirmed! 🎉</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Payment received. We&apos;re cooking your food now.
+          </p>
         </div>
 
-        {/* Headline */}
-        <h1 className="text-2xl font-extrabold text-brand-dark mb-1">
-          Order Confirmed! 🎉
-        </h1>
-        <p className="text-gray-500 text-sm mb-5">
-          Payment received. We&apos;re preparing your food now.
-        </p>
+        {/* ── Countdown ring ── */}
+        {!done ? (
+          <div className="flex flex-col items-center mb-5">
+            <div className="relative w-24 h-24">
+              <svg className="w-24 h-24 -rotate-90" viewBox="0 0 88 88">
+                {/* Track */}
+                <circle cx="44" cy="44" r="38" fill="none" stroke="#F5EDE0" strokeWidth="6" />
+                {/* Progress */}
+                <circle
+                  cx="44" cy="44" r="38"
+                  fill="none"
+                  stroke="#E85D04"
+                  strokeWidth="6"
+                  strokeLinecap="round"
+                  strokeDasharray={`${dash} ${circumference}`}
+                  className="transition-all duration-1000"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-xl font-extrabold text-brand-dark leading-none">
+                  {formatTime(remaining)}
+                </span>
+                <span className="text-[10px] text-gray-400 font-semibold mt-0.5">left</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              <UtensilsCrossed size={15} className="text-brand-orange" />
+              <p className="text-sm font-bold text-brand-dark">Your food is being prepared</p>
+            </div>
+            <p className="text-xs text-gray-400 mt-1 text-center">
+              You&apos;ll receive an SMS when your order is ready
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center mb-5 bg-orange-50 rounded-2xl p-4">
+            <Clock size={28} className="text-brand-orange mb-2" />
+            <p className="font-extrabold text-brand-dark text-center">
+              Your order should be ready soon!
+            </p>
+            <p className="text-xs text-gray-500 text-center mt-1">
+              We&apos;ll send you an SMS once it&apos;s confirmed ready for pickup or delivery.
+            </p>
+          </div>
+        )}
 
         {/* Order summary */}
-        <div className="bg-brand-cream rounded-2xl p-4 text-left space-y-2 mb-4">
+        <div className="bg-brand-cream rounded-2xl p-4 space-y-2 mb-4">
           <Row label="Name"     value={order.customer_name} />
           <Row label="Location" value={order.delivery_location} />
           <Row label="Total"    value={formatGHS(order.total_amount)} highlight />
@@ -36,7 +110,7 @@ export default function PayStatus({ order, onDismiss }) {
         </div>
 
         {/* Items list */}
-        <div className="text-left mb-4 space-y-2 bg-white border border-brand-muted rounded-2xl p-4">
+        <div className="mb-5 space-y-2 bg-white border border-brand-muted rounded-2xl p-4">
           <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">
             Your Items
           </p>
@@ -46,9 +120,6 @@ export default function PayStatus({ order, onDismiss }) {
                 <span className="text-sm font-semibold text-brand-dark">
                   {item.quantity}× {item.name}
                 </span>
-                {item.description && (
-                  <p className="text-[11px] text-gray-400 leading-snug">{item.description}</p>
-                )}
               </div>
               <span className="text-sm font-bold text-brand-dark whitespace-nowrap">
                 {formatGHS(item.price * item.quantity)}
@@ -57,22 +128,13 @@ export default function PayStatus({ order, onDismiss }) {
           ))}
         </div>
 
-        {/* ETA notice */}
-        <div className="flex items-center gap-2 bg-orange-50 rounded-xl px-4 py-3 mb-5">
-          <UtensilsCrossed size={18} className="text-brand-orange flex-shrink-0" />
-          <p className="text-xs text-brand-dark font-semibold text-left">
-            Estimated wait: <strong>20–35 mins</strong>. We&apos;ll call you when it&apos;s ready!
-          </p>
-        </div>
-
-        {/* Backup: manually re-send order to kitchen via WhatsApp */}
-        <button
-          onClick={() => notifyOwner(order)}
-          className="w-full flex items-center justify-center gap-2 bg-[#25D366] text-white font-bold rounded-2xl py-3.5 text-sm mb-3 active:opacity-80 transition-opacity"
-        >
-          <MessageCircle size={18} />
-          Send Order to Kitchen via WhatsApp
-        </button>
+        {order.notes && (
+          <div className="bg-yellow-50 rounded-xl px-4 py-3 mb-5">
+            <p className="text-xs text-brand-dark">
+              📝 <span className="font-bold">Note:</span> {order.notes}
+            </p>
+          </div>
+        )}
 
         <button
           onClick={onDismiss}

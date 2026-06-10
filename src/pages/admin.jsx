@@ -1,7 +1,7 @@
 import Head from 'next/head'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { notifyCustomer } from '../lib/whatsapp'
+import { sendSMSClient, STATUS_SMS } from '../lib/sms'
 import {
   ShoppingBag, Clock, XCircle,
   TrendingUp, RefreshCw, LogOut, Eye,
@@ -276,10 +276,14 @@ export default function AdminPage() {
   async function handleStatusChange(orderId, newStatus) {
     await supabase.from('orders').update({ status: newStatus }).eq('id', orderId)
 
-    // Notify the customer on key status changes
+    // SMS the customer on key status changes
     const updatedOrder = { ...selectedOrder, status: newStatus }
-    if (['preparing', 'ready', 'delivered', 'cancelled'].includes(newStatus)) {
-      notifyCustomer(updatedOrder, newStatus)
+    const msgBuilder = STATUS_SMS[newStatus]
+    if (msgBuilder && updatedOrder.momo_number) {
+      sendSMSClient({
+        to:      updatedOrder.momo_number,
+        message: msgBuilder(updatedOrder),
+      })
     }
 
     setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null)

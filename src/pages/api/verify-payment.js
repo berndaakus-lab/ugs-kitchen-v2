@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { createClient } from '@supabase/supabase-js'
+import { sendSMS, msgOrderConfirmed, msgOwnerNewOrder } from '../../lib/sms'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -21,14 +22,30 @@ export default async function handler(req, res) {
     const status = paystackRes?.data?.status // 'success' | 'failed' | 'pending' | 'pay_offline'
 
     if (status === 'success') {
-      await supabase
+      // Only update if not already paid (avoid duplicate SMS if webhook fires too)
+      const { data: existing } = await supabase
         .from('orders')
-        .update({
-          status:          'paid',
-          paid_at:         new Date().toISOString(),
-          payment_channel: paystackRes.data.channel,
-        })
+        .select('status, momo_number, customer_name, delivery_location, total_amount, items, branches(name, phone)')
         .eq('id', orderId)
+        .single()
+
+      if (existing && existing.status !== 'paid') {
+        await supabase
+          .from('orders')
+          .update({
+            status:          'paid',
+            paid_at:         new Date().toISOString(),
+            payment_channel: paystackRes.data.channel,
+          })
+          .eq('id', orderId)
+
+        // Send SMS notifications (only fires once — guarded by status check above)
+        const ownerPhone = existing.branches?.phone || process.env.OWNER_PHONE
+        if (ownerPhone) {
+          sendSMS({ to: ownerPhone, message: msgOwnerNewOrder(existing, existing.branches) })
+        }
+        sendSMS({ to: existing.momo_number, message: msgOrderConfirmed(existing) })
+      }
 
       return res.status(200).json({ status: 'paid' })
     }
