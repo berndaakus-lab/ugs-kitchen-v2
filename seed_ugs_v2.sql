@@ -1,7 +1,21 @@
 -- ============================================================
 -- UGs Kitchen V2 — Supabase Schema & Seed Data
 -- Run this in the Supabase SQL Editor
+-- Safe to run from scratch — drops everything and rebuilds clean
 -- ============================================================
+
+-- ─── DROP EXISTING TABLES (order matters due to foreign keys) ─
+drop table if exists reviews    cascade;
+drop table if exists orders     cascade;
+drop table if exists menu_items cascade;
+drop table if exists categories cascade;
+drop table if exists branches   cascade;
+
+-- Drop storage policies if bucket already exists
+drop policy if exists "Public can view menu images"  on storage.objects;
+drop policy if exists "Owner can upload menu images" on storage.objects;
+drop policy if exists "Owner can update menu images" on storage.objects;
+drop policy if exists "Owner can delete menu images" on storage.objects;
 
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
