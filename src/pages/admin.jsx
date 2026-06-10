@@ -186,33 +186,47 @@ function Row({ label, value, bold }) {
 
 // ── Main Admin Dashboard ──────────────────────────────────────
 export default function AdminPage() {
-  const [authed,       setAuthed]       = useState(false)
-  const [activeTab,    setActiveTab]    = useState('orders') // 'orders' | 'reviews'
-  const [orders,       setOrders]       = useState([])
-  const [loading,      setLoading]      = useState(true)
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
-  const [selectedOrder, setSelectedOrder] = useState(null)
-  const [refreshing,   setRefreshing]   = useState(false)
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [reviews,      setReviews]      = useState([])
+  const [authed,         setAuthed]         = useState(false)
+  const [activeTab,      setActiveTab]      = useState('orders')
+  const [orders,         setOrders]         = useState([])
+  const [loading,        setLoading]        = useState(true)
+  const [selectedDate,   setSelectedDate]   = useState(() => new Date().toISOString().split('T')[0])
+  const [selectedOrder,  setSelectedOrder]  = useState(null)
+  const [refreshing,     setRefreshing]     = useState(false)
+  const [statusFilter,   setStatusFilter]   = useState('all')
+  const [reviews,        setReviews]        = useState([])
   const [reviewsLoading, setReviewsLoading] = useState(true)
+  const [branches,       setBranches]       = useState([])
+  const [branchFilter,   setBranchFilter]   = useState('all')
+
+  // Load branches once on login
+  useEffect(() => {
+    if (!authed) return
+    supabase.from('branches').select('id, name, slug').eq('is_active', true).order('sort_order')
+      .then(({ data }) => setBranches(data ?? []))
+  }, [authed])
 
   const fetchOrders = useCallback(async () => {
     setRefreshing(true)
     const start = `${selectedDate}T00:00:00`
     const end   = `${selectedDate}T23:59:59`
 
-    const { data } = await supabase
+    let query = supabase
       .from('orders')
       .select('*')
       .gte('created_at', start)
       .lte('created_at', end)
       .order('created_at', { ascending: false })
 
+    if (branchFilter !== 'all') {
+      query = query.eq('branch_id', branchFilter)
+    }
+
+    const { data } = await query
     setOrders(data ?? [])
     setLoading(false)
     setRefreshing(false)
-  }, [selectedDate])
+  }, [selectedDate, branchFilter])
 
   const fetchReviews = useCallback(async () => {
     const { data } = await supabase
@@ -397,8 +411,8 @@ export default function AdminPage() {
           {/* ── ORDERS TAB ──────────────────────────────────── */}
           {activeTab === 'orders' && <>
 
-          {/* Date picker */}
-          <div className="flex items-center gap-3">
+          {/* Date picker + Branch filter */}
+          <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <input
                 type="date"
@@ -410,12 +424,35 @@ export default function AdminPage() {
             {!isToday && (
               <button
                 onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-                className="px-4 py-2.5 bg-brand-orange text-white text-sm font-bold rounded-xl"
+                className="px-3 py-2.5 bg-brand-orange text-white text-sm font-bold rounded-xl flex-shrink-0"
               >
                 Today
               </button>
             )}
           </div>
+
+          {/* Branch filter — only shown when multiple branches exist */}
+          {branches.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+              <button
+                onClick={() => setBranchFilter('all')}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors
+                  ${branchFilter === 'all' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+              >
+                All Branches
+              </button>
+              {branches.map(b => (
+                <button
+                  key={b.id}
+                  onClick={() => setBranchFilter(b.id)}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors
+                    ${branchFilter === b.id ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+                >
+                  {b.name}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Stats */}
           <div className="grid grid-cols-2 gap-3">

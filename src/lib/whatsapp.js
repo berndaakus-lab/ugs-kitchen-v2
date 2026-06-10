@@ -75,8 +75,10 @@ export function notifyCustomer(order, status) {
   window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer')
 }
 
-export function notifyOwner(order) {
-  const owner = process.env.NEXT_PUBLIC_OWNER_WHATSAPP
+export function notifyOwner(order, branch = null) {
+  // Use branch-specific WhatsApp if available, fall back to env var
+  const owner = (branch?.whatsapp ? toInternational(branch.whatsapp) : null)
+    ?? process.env.NEXT_PUBLIC_OWNER_WHATSAPP
   if (!owner) return
   const text = buildOwnerMessage(order)
   window.open(`https://wa.me/${owner}?text=${text}`, '_blank', 'noopener,noreferrer')

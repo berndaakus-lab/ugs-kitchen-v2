@@ -1,20 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Minus, Plus, ChevronDown, Loader2 } from 'lucide-react'
 import { useCart } from '../context/CartContext'
+import { useBranch } from '../context/BranchContext'
 import { supabase } from '../lib/supabase'
 import { notifyOwner } from '../lib/whatsapp'
-
-const DELIVERY_LOCATIONS = [
-  'Ayigya',
-  'Ayigya Zongo',
-  'Kotei',
-  'KNUST Campus',
-  'Bomso',
-  'Oduom',
-  'Boadi',
-  'Emena',
-  'Pick-Up (No Delivery)',
-]
 
 function formatGHS(amount) {
   return `GH₵ ${Number(amount).toFixed(2)}`
@@ -29,6 +18,10 @@ function formatMoMo(raw) {
 
 export default function OrderDrawer({ onPaymentSuccess }) {
   const { items, totalAmount, isOpen, closeDrawer, addItem, decrement, clearCart } = useCart()
+  const { currentBranch } = useBranch()
+
+  // Delivery locations come from the branch record (JSONB array)
+  const deliveryLocations = currentBranch?.delivery_locations ?? []
 
   const [name, setName]         = useState('')
   const [location, setLocation] = useState('')
@@ -36,6 +29,9 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
   const drawerRef               = useRef(null)
+
+  // Reset location when branch changes
+  useEffect(() => { setLocation('') }, [currentBranch?.id])
 
   // Close on backdrop click
   function handleBackdrop(e) {
@@ -70,6 +66,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
           items:             items,
           total_amount:      totalAmount,
           status:            'pending',
+          branch_id:         currentBranch?.id ?? null,
         })
         .select()
         .single()
@@ -112,7 +109,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       clearCart()
       closeDrawer()
       onPaymentSuccess(orderData)
-      notifyOwner(orderData)
+      notifyOwner(orderData, currentBranch)
     }
 
     function handleFailed() {
@@ -271,7 +268,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
                   className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base font-semibold outline-none focus:border-brand-orange appearance-none bg-white transition-colors"
                 >
                   <option value="">Select location…</option>
-                  {DELIVERY_LOCATIONS.map(loc => (
+                  {deliveryLocations.map(loc => (
                     <option key={loc} value={loc}>{loc}</option>
                   ))}
                 </select>
