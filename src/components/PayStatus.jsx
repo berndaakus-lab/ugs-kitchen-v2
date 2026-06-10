@@ -1,40 +1,18 @@
 import { CheckCircle2, UtensilsCrossed, MessageCircle } from 'lucide-react'
+import { notifyOwner } from '../lib/whatsapp'
 
 function formatGHS(amount) {
   return `GH₵ ${Number(amount).toFixed(2)}`
 }
 
-function buildWhatsAppMessage(order) {
-  const orderNum = `#${String(order.id).slice(-6).toUpperCase()}`
-  const itemLines = order.items
-    ?.map(i => `  • ${i.quantity}× ${i.name} — GH₵${(i.price * i.quantity).toFixed(2)}`)
-    .join('\n') ?? ''
-
-  return encodeURIComponent(
-    `🔔 *NEW ORDER ${orderNum}*\n\n` +
-    `👤 *Customer:* ${order.customer_name}\n` +
-    `📍 *Location:* ${order.delivery_location}\n` +
-    `📱 *MoMo:* ${order.momo_number}\n\n` +
-    `🍽️ *Items:*\n${itemLines}\n\n` +
-    `💰 *Total Paid: GH₵${Number(order.total_amount).toFixed(2)}*\n\n` +
-    `✅ Payment confirmed via MoMo. Please prepare order!`
-  )
-}
-
 export default function PayStatus({ order, onDismiss }) {
   if (!order) return null
-
-  function handleNotifyOwner() {
-    const owner = process.env.NEXT_PUBLIC_OWNER_WHATSAPP
-    if (!owner) return
-    const msg = buildWhatsAppMessage(order)
-    window.open(`https://wa.me/${owner}?text=${msg}`, '_blank', 'noopener,noreferrer')
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/95 px-6 animate-fade-in overflow-y-auto py-6">
       <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl">
-        {/* Icon */}
+
+        {/* Success icon */}
         <div className="flex justify-center mb-4">
           <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
             <CheckCircle2 size={44} className="text-green-500" strokeWidth={2} />
@@ -87,9 +65,9 @@ export default function PayStatus({ order, onDismiss }) {
           </p>
         </div>
 
-        {/* WhatsApp owner button (backup manual trigger) */}
+        {/* Backup: manually re-send order to kitchen via WhatsApp */}
         <button
-          onClick={handleNotifyOwner}
+          onClick={() => notifyOwner(order)}
           className="w-full flex items-center justify-center gap-2 bg-[#25D366] text-white font-bold rounded-2xl py-3.5 text-sm mb-3 active:opacity-80 transition-opacity"
         >
           <MessageCircle size={18} />

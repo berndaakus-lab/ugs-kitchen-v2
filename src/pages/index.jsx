@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import MenuGrid from '../components/MenuGrid'
 import OrderDrawer from '../components/OrderDrawer'
 import PayStatus from '../components/PayStatus'
+import ReviewSection from '../components/ReviewSection'
 import Footer from '../components/Footer'
 import { useCart } from '../context/CartContext'
 
@@ -91,6 +92,9 @@ export default function Home() {
         <main className="max-w-lg mx-auto">
           <MenuGrid menuItems={menuItems} categories={categories} loading={loading} />
         </main>
+
+        {/* Reviews */}
+        <ReviewSection />
 
         <Footer />
       </div>
