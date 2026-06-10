@@ -114,15 +114,41 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       const result = await res.json()
       if (!res.ok) throw new Error(result.message || 'Payment initiation failed.')
 
-      // 3. Start polling order status (Paystack webhook will update it)
-      pollOrderStatus(order.id)
+      // 3. Poll via Supabase Realtime AND directly via Paystack verify
+      pollOrderStatus(order.id, result.reference)
     } catch (err) {
       setError(err.message)
       setLoading(false)
     }
   }
 
-  function pollOrderStatus(orderId) {
+  function pollOrderStatus(orderId, reference) {
+    let resolved = false
+
+    function handleSuccess(orderData) {
+      if (resolved) return
+      resolved = true
+      channel.unsubscribe()
+      clearInterval(pollInterval)
+      clearTimeout(timeoutId)
+      setLoading(false)
+      clearCart()
+      closeDrawer()
+      onPaymentSuccess(orderData)
+      notifyOwnerWhatsApp(orderData)
+    }
+
+    function handleFailed() {
+      if (resolved) return
+      resolved = true
+      channel.unsubscribe()
+      clearInterval(pollInterval)
+      clearTimeout(timeoutId)
+      setLoading(false)
+      setError('Payment failed or was declined. Please try again.')
+    }
+
+    // Layer 1 — Supabase Realtime (fires instantly when webhook updates the DB)
     const channel = supabase
       .channel(`order-${orderId}`)
       .on(
@@ -130,30 +156,44 @@ export default function OrderDrawer({ onPaymentSuccess }) {
         { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
         payload => {
           const status = payload.new.status
-          if (status === 'paid') {
-            channel.unsubscribe()
-            setLoading(false)
-            clearCart()
-            closeDrawer()
-            onPaymentSuccess(payload.new)
-            // Auto-open WhatsApp to notify the owner
-            notifyOwnerWhatsApp(payload.new)
-          } else if (status === 'failed') {
-            channel.unsubscribe()
-            setLoading(false)
-            setError('Payment failed or was declined. Please try again.')
-          }
+          if (status === 'paid')   handleSuccess(payload.new)
+          if (status === 'failed') handleFailed()
         }
       )
       .subscribe()
 
-    // Timeout safety after 3 minutes
-    setTimeout(() => {
-      channel.unsubscribe()
-      if (loading) {
-        setLoading(false)
-        setError('Payment timed out. Check your phone and try again.')
+    // Layer 2 — Direct Paystack verify polling every 5s (covers test mode + webhook delays)
+    const pollInterval = setInterval(async () => {
+      if (resolved || !reference) return
+      try {
+        const res = await fetch(
+          `/api/verify-payment?reference=${reference}&orderId=${orderId}`
+        )
+        const data = await res.json()
+        if (data.status === 'paid') {
+          // Fetch the full order row to pass to success screen
+          const { data: order } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('id', orderId)
+            .single()
+          handleSuccess(order)
+        } else if (data.status === 'failed') {
+          handleFailed()
+        }
+      } catch {
+        // Silent — keep polling
       }
+    }, 5000)
+
+    // Layer 3 — Hard timeout after 3 minutes
+    const timeoutId = setTimeout(() => {
+      if (resolved) return
+      resolved = true
+      channel.unsubscribe()
+      clearInterval(pollInterval)
+      setLoading(false)
+      setError('Payment timed out. Check your phone and try again.')
     }, 180_000)
   }
 
