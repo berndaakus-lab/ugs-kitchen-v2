@@ -42,7 +42,7 @@ const CUSTOMER_MESSAGES = {
     `📦 *Your Order is Ready!*\n` +
     `Order *#${String(order.id).slice(-6).toUpperCase()}* is packed and ready.\n\n` +
     `${order.delivery_location === 'Pick-Up (No Delivery)'
-      ? '🏪 Please come in to collect your order.'
+      ? '🏪 Please come in to collect your order.\n\n⭐ Enjoyed your meal? Leave us a quick review:\n👉 ' + (process.env.NEXT_PUBLIC_APP_URL ?? 'https://ugskitchen.com') + '/review'
       : `🛵 Our delivery rider is on the way to *${order.delivery_location}*!`
     }\n\n` +
     `UGs Kitchen 🍽️`,
@@ -52,7 +52,9 @@ const CUSTOMER_MESSAGES = {
     `🎉 *Order Delivered!*\n` +
     `Your order *#${String(order.id).slice(-6).toUpperCase()}* has been delivered.\n\n` +
     `We hope you enjoy your meal! 😋\n\n` +
-    `*Leave us a review:* ${process.env.NEXT_PUBLIC_APP_URL ?? ''}\n\n` +
+    `⭐ *How was your experience?*\n` +
+    `We'd love to hear from you — it only takes 30 seconds:\n` +
+    `👉 ${(process.env.NEXT_PUBLIC_APP_URL ?? 'https://ugskitchen.com')}/review\n\n` +
     `See you next time — *UGs Kitchen* 🍽️`,
 
   cancelled: order =>
