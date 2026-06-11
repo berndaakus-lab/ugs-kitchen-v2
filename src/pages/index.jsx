@@ -1,5 +1,5 @@
 import Head from 'next/head'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { ShoppingBag, MapPin, ChevronDown, User, LogOut, History } from 'lucide-react'
 import Link from 'next/link'
@@ -20,9 +20,7 @@ export default function Home() {
   const [categories,  setCategories]  = useState([])
   const [loading,     setLoading]     = useState(true)
   const [paidOrder,   setPaidOrder]   = useState(null)
-  const [showAuth,     setShowAuth]     = useState(false)
-  const [showUserMenu, setShowUserMenu] = useState(false)
-  const userMenuRef = useRef(null)
+  const [showAuth, setShowAuth] = useState(false)
   const router = useRouter()
 
   const { totalItems, openDrawer, clearCart } = useCart()
@@ -36,18 +34,6 @@ export default function Home() {
       router.replace('/', undefined, { shallow: true })
     }
   }, [router.query.signin])
-
-  // Close user dropdown when clicking anywhere outside it
-  useEffect(() => {
-    if (!showUserMenu) return
-    function handleClickOutside(e) {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
-        setShowUserMenu(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showUserMenu])
 
   // Reload menu whenever branch changes
   useEffect(() => {
@@ -116,41 +102,34 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {/* Auth button */}
+            <div className="flex items-center gap-1.5">
               {isLoggedIn ? (
-                <div className="relative" ref={userMenuRef}>
-                  <button
-                    onClick={() => setShowUserMenu(v => !v)}
-                    className="flex items-center gap-1.5 bg-brand-muted text-brand-dark px-3 py-2 rounded-xl font-bold text-sm"
+                <>
+                  {/* Greeting */}
+                  <span className="text-xs font-bold text-brand-dark hidden sm:block max-w-[70px] truncate">
+                    Hi, {customer.name.split(' ')[0]}
+                  </span>
+                  {/* My Orders */}
+                  <Link
+                    href="/orders"
+                    className="flex items-center justify-center w-9 h-9 rounded-xl bg-brand-muted text-brand-dark"
+                    title="My Orders"
                   >
-                    <User size={15} />
-                    <span className="max-w-[80px] truncate">{customer.name.split(' ')[0]}</span>
+                    <History size={17} />
+                  </Link>
+                  {/* Sign Out */}
+                  <button
+                    onClick={signOut}
+                    className="flex items-center justify-center w-9 h-9 rounded-xl bg-brand-muted text-red-500"
+                    title="Sign Out"
+                  >
+                    <LogOut size={17} />
                   </button>
-                  {showUserMenu && (
-                    <div className="absolute right-0 top-full mt-1 bg-white rounded-2xl shadow-xl border border-brand-muted overflow-hidden z-50 w-44">
-                      <Link
-                        href="/orders"
-                        className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand-muted"
-                        onClick={() => setShowUserMenu(false)}
-                      >
-                        <History size={15} />
-                        My Orders
-                      </Link>
-                      <button
-                        onClick={() => { signOut(); setShowUserMenu(false) }}
-                        className="flex items-center gap-2 w-full px-4 py-3 text-sm font-semibold text-red-500 hover:bg-red-50 border-t border-brand-muted"
-                      >
-                        <LogOut size={15} />
-                        Sign Out
-                      </button>
-                    </div>
-                  )}
-                </div>
+                </>
               ) : (
                 <button
                   onClick={() => setShowAuth(true)}
-                  className="flex items-center gap-1 text-brand-orange font-bold text-sm px-2 py-1.5 rounded-xl hover:bg-brand-muted transition-colors"
+                  className="flex items-center gap-1 text-brand-orange font-bold text-sm px-2.5 py-1.5 rounded-xl bg-brand-muted"
                 >
                   <User size={15} />
                   Sign In
@@ -164,7 +143,7 @@ export default function Home() {
                   className="flex items-center gap-1.5 bg-brand-dark text-white px-3 py-2 rounded-xl font-bold text-sm"
                 >
                   <ShoppingBag size={16} />
-                  <span>{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
+                  <span>{totalItems}</span>
                 </button>
               )}
             </div>
