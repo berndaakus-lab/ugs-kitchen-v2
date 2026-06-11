@@ -5,7 +5,8 @@ import { sendSMSClient, smsPhone, STATUS_SMS } from '../lib/sms'
 import {
   ShoppingBag, Clock, XCircle,
   TrendingUp, RefreshCw, LogOut, Eye,
-  Star, CheckCircle2, Trash2, MessageSquare
+  Star, CheckCircle2, Trash2, MessageSquare,
+  UtensilsCrossed, Plus, Pencil, ChevronLeft, ChevronRight, X, ToggleLeft, ToggleRight
 } from 'lucide-react'
 
 const STATUS_STYLES = {
@@ -194,6 +195,162 @@ function Row({ label, value, bold }) {
   )
 }
 
+// ── Menu Item Form Modal ──────────────────────────────────────
+function MenuItemModal({ item, categories, branches, onSave, onClose, saving }) {
+  const isNew = !item.id
+  const [form, setForm] = useState(item)
+
+  function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (!form.name.trim() || !form.price || !form.branch_id) return
+    onSave(form)
+  }
+
+  // Filter categories to current branch
+  const branchCats = categories.filter(c => c.branch_id === form.branch_id)
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center" onClick={onClose}>
+      <div
+        className="bg-white rounded-t-3xl w-full max-w-lg p-6 animate-slide-up max-h-[90dvh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-extrabold">{isNew ? 'Add Menu Item' : 'Edit Item'}</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-brand-muted flex items-center justify-center">
+            <X size={16} className="text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Branch (only shown if multiple exist) */}
+          {branches.length > 1 && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Branch *</label>
+              <select
+                value={form.branch_id}
+                onChange={e => set('branch_id', e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange bg-white"
+                required
+              >
+                <option value="">Select branch…</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Item Name *</label>
+            <input
+              value={form.name}
+              onChange={e => set('name', e.target.value)}
+              placeholder="e.g. Jollof Rice + Chicken"
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange"
+              required
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Description</label>
+            <textarea
+              value={form.description ?? ''}
+              onChange={e => set('description', e.target.value)}
+              placeholder="Short description…"
+              rows={2}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange resize-none"
+            />
+          </div>
+
+          {/* Price + Category row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Price (GH₵) *</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.price}
+                onChange={e => set('price', e.target.value)}
+                placeholder="0.00"
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Category</label>
+              <select
+                value={form.category_id ?? ''}
+                onChange={e => set('category_id', e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange bg-white"
+              >
+                <option value="">None</option>
+                {branchCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Sort order + Image URL row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Sort Order</label>
+              <input
+                type="number"
+                min="0"
+                value={form.sort_order ?? 0}
+                onChange={e => set('sort_order', e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Image URL</label>
+              <input
+                value={form.image ?? ''}
+                onChange={e => set('image', e.target.value)}
+                placeholder="https://…"
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange"
+              />
+            </div>
+          </div>
+
+          {/* Toggles */}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => set('is_available', !form.is_available)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm border-2 transition-colors
+                ${form.is_available ? 'border-green-400 bg-green-50 text-green-700' : 'border-gray-200 bg-white text-gray-500'}`}
+            >
+              {form.is_available ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+              Available
+            </button>
+            <button
+              type="button"
+              onClick={() => set('is_popular', !form.is_popular)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm border-2 transition-colors
+                ${form.is_popular ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-gray-200 bg-white text-gray-500'}`}
+            >
+              <Star size={14} fill={form.is_popular ? '#E85D04' : 'none'} stroke={form.is_popular ? '#E85D04' : 'currentColor'} />
+              Popular
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-orange-700 disabled:opacity-60 transition-colors"
+          >
+            {saving ? 'Saving…' : isNew ? 'Add Item' : 'Save Changes'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Admin Dashboard ──────────────────────────────────────
 export default function AdminPage() {
   const [authed,         setAuthed]         = useState(false)
@@ -208,6 +365,17 @@ export default function AdminPage() {
   const [reviewsLoading, setReviewsLoading] = useState(true)
   const [branches,       setBranches]       = useState([])
   const [branchFilter,   setBranchFilter]   = useState('all')
+
+  // Menu tab state
+  const MENU_PAGE_SIZE = 10
+  const [menuItems,   setMenuItems]   = useState([])
+  const [menuLoading, setMenuLoading] = useState(false)
+  const [menuPage,    setMenuPage]    = useState(0)
+  const [menuTotal,   setMenuTotal]   = useState(0)
+  const [menuBranch,  setMenuBranch]  = useState('all')
+  const [categories,  setCategories]  = useState([])
+  const [menuForm,    setMenuForm]    = useState(null)   // null=closed, {}=add, item=edit
+  const [formSaving,  setFormSaving]  = useState(false)
 
   // Load branches once on login
   useEffect(() => {
@@ -238,6 +406,27 @@ export default function AdminPage() {
     setRefreshing(false)
   }, [selectedDate, branchFilter])
 
+  const fetchMenuItems = useCallback(async () => {
+    setMenuLoading(true)
+    let query = supabase
+      .from('menu_items')
+      .select('id, name, description, price, image, is_available, is_popular, sort_order, branch_id, category_id, categories(name)', { count: 'exact' })
+      .order('sort_order')
+      .range(menuPage * MENU_PAGE_SIZE, menuPage * MENU_PAGE_SIZE + MENU_PAGE_SIZE - 1)
+    if (menuBranch !== 'all') query = query.eq('branch_id', menuBranch)
+    const { data, count } = await query
+    setMenuItems(data ?? [])
+    setMenuTotal(count ?? 0)
+    setMenuLoading(false)
+  }, [menuPage, menuBranch])
+
+  const fetchCategories = useCallback(async () => {
+    let query = supabase.from('categories').select('id, name, branch_id').order('sort_order')
+    if (menuBranch !== 'all') query = query.eq('branch_id', menuBranch)
+    const { data } = await query
+    setCategories(data ?? [])
+  }, [menuBranch])
+
   const fetchReviews = useCallback(async () => {
     const { data } = await supabase
       .from('reviews')
@@ -250,6 +439,10 @@ export default function AdminPage() {
   useEffect(() => {
     if (authed) { fetchOrders(); fetchReviews() }
   }, [authed, fetchOrders, fetchReviews])
+
+  useEffect(() => {
+    if (authed && activeTab === 'menu') { fetchMenuItems(); fetchCategories() }
+  }, [authed, activeTab, fetchMenuItems, fetchCategories])
 
   // Realtime — new orders and reviews appear instantly
   useEffect(() => {
@@ -271,6 +464,40 @@ export default function AdminPage() {
     if (!confirm('Delete this review permanently?')) return
     await supabase.from('reviews').delete().eq('id', id)
     fetchReviews()
+  }
+
+  async function handleMenuSave(formData) {
+    setFormSaving(true)
+    const payload = {
+      name:         formData.name.trim(),
+      description:  formData.description?.trim() || null,
+      price:        parseFloat(formData.price),
+      image:        formData.image?.trim() || null,
+      is_available: formData.is_available,
+      is_popular:   formData.is_popular,
+      sort_order:   parseInt(formData.sort_order) || 0,
+      category_id:  formData.category_id || null,
+      branch_id:    formData.branch_id,
+    }
+    if (formData.id) {
+      await supabase.from('menu_items').update(payload).eq('id', formData.id)
+    } else {
+      await supabase.from('menu_items').insert(payload)
+    }
+    setFormSaving(false)
+    setMenuForm(null)
+    fetchMenuItems()
+  }
+
+  async function handleMenuDelete(id) {
+    if (!confirm('Delete this menu item? This cannot be undone.')) return
+    await supabase.from('menu_items').delete().eq('id', id)
+    fetchMenuItems()
+  }
+
+  async function handleMenuToggle(item, field) {
+    await supabase.from('menu_items').update({ [field]: !item[field] }).eq('id', item.id)
+    fetchMenuItems()
   }
 
   async function handleStatusChange(orderId, newStatus) {
@@ -320,7 +547,7 @@ export default function AdminPage() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => activeTab === 'orders' ? fetchOrders() : fetchReviews()}
+                onClick={() => activeTab === 'orders' ? fetchOrders() : activeTab === 'reviews' ? fetchReviews() : fetchMenuItems()}
                 className={`w-9 h-9 rounded-xl bg-brand-muted flex items-center justify-center ${refreshing ? 'animate-spin' : ''}`}
               >
                 <RefreshCw size={16} className="text-brand-dark" />
@@ -355,6 +582,13 @@ export default function AdminPage() {
                 {reviews.length}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => setActiveTab('menu')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
+              ${activeTab === 'menu' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+          >
+            <UtensilsCrossed size={15} /> Menu
           </button>
         </div>
 
@@ -567,6 +801,146 @@ export default function AdminPage() {
 
           </> /* end orders tab */}
 
+          {/* ── MENU TAB ────────────────────────────────────── */}
+          {activeTab === 'menu' && (
+            <div className="space-y-4">
+
+              {/* Branch filter + Add button */}
+              <div className="flex items-center gap-2">
+                {branches.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
+                    <button
+                      onClick={() => { setMenuBranch('all'); setMenuPage(0) }}
+                      className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors
+                        ${menuBranch === 'all' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+                    >
+                      All
+                    </button>
+                    {branches.map(b => (
+                      <button
+                        key={b.id}
+                        onClick={() => { setMenuBranch(b.id); setMenuPage(0) }}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors
+                          ${menuBranch === b.id ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+                      >
+                        {b.name.replace('UGs Kitchen — ', '')}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={() => setMenuForm({ name: '', description: '', price: '', image: '', is_available: true, is_popular: false, sort_order: 0, category_id: '', branch_id: menuBranch !== 'all' ? menuBranch : (branches[0]?.id ?? '') })}
+                  className="flex-shrink-0 flex items-center gap-1.5 bg-brand-orange text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-orange-700"
+                >
+                  <Plus size={15} /> Add Item
+                </button>
+              </div>
+
+              {/* Count + pagination info */}
+              {menuTotal > 0 && (
+                <p className="text-xs text-gray-400 font-semibold">
+                  Showing {menuPage * MENU_PAGE_SIZE + 1}–{Math.min((menuPage + 1) * MENU_PAGE_SIZE, menuTotal)} of {menuTotal} items
+                </p>
+              )}
+
+              {/* Menu list */}
+              {menuLoading ? (
+                <div className="space-y-3">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="bg-white rounded-2xl h-16 animate-pulse" />
+                  ))}
+                </div>
+              ) : menuItems.length === 0 ? (
+                <div className="text-center py-16">
+                  <UtensilsCrossed size={40} className="text-gray-200 mx-auto mb-3" />
+                  <p className="text-gray-400 font-semibold">No menu items</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {menuItems.map(item => (
+                    <div key={item.id} className="bg-white rounded-2xl p-4 border border-brand-muted shadow-sm">
+                      <div className="flex items-start gap-3">
+                        {/* Image thumbnail */}
+                        {item.image ? (
+                          <img src={item.image} alt={item.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-brand-cream flex items-center justify-center flex-shrink-0">
+                            <UtensilsCrossed size={18} className="text-gray-300" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="font-bold text-brand-dark text-sm truncate">{item.name}</p>
+                            {item.is_popular && (
+                              <span className="text-[9px] font-extrabold bg-orange-100 text-brand-orange px-1.5 py-0.5 rounded-full">★ Popular</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400">{item.categories?.name ?? '—'}</p>
+                          <p className="text-sm font-extrabold text-brand-orange mt-0.5">{formatGHS(item.price)}</p>
+                        </div>
+                        {/* Inline actions */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => setMenuForm({ ...item, category_id: item.category_id ?? '', image: item.image ?? '' })}
+                            title="Edit item"
+                            className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center active:bg-gray-200"
+                          >
+                            <Pencil size={14} className="text-gray-500" />
+                          </button>
+                          <button
+                            onClick={() => handleMenuDelete(item.id)}
+                            title="Delete item"
+                            className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center active:bg-red-100"
+                          >
+                            <Trash2 size={14} className="text-red-400" />
+                          </button>
+                        </div>
+                      </div>
+                      {/* Availability toggle pill — full width, clearly labeled */}
+                      <button
+                        onClick={() => handleMenuToggle(item, 'is_available')}
+                        className={`mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-xl font-bold text-xs border-2 transition-colors active:scale-[0.98]
+                          ${item.is_available
+                            ? 'border-green-300 bg-green-50 text-green-700 active:bg-green-100'
+                            : 'border-red-300 bg-red-50 text-red-600 active:bg-red-100'
+                          }`}
+                      >
+                        {item.is_available
+                          ? <><ToggleRight size={14} /> Available — tap to mark Out of Stock</>
+                          : <><ToggleLeft  size={14} /> Out of Stock — tap to mark Available</>
+                        }
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pagination */}
+              {menuTotal > MENU_PAGE_SIZE && (
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    disabled={menuPage === 0}
+                    onClick={() => setMenuPage(p => p - 1)}
+                    className="flex items-center gap-1 px-3 py-2 rounded-xl font-bold text-sm bg-white border border-gray-200 text-gray-600 disabled:opacity-40"
+                  >
+                    <ChevronLeft size={15} /> Prev
+                  </button>
+                  <span className="text-xs text-gray-500 font-semibold">
+                    Page {menuPage + 1} / {Math.ceil(menuTotal / MENU_PAGE_SIZE)}
+                  </span>
+                  <button
+                    disabled={(menuPage + 1) * MENU_PAGE_SIZE >= menuTotal}
+                    onClick={() => setMenuPage(p => p + 1)}
+                    className="flex items-center gap-1 px-3 py-2 rounded-xl font-bold text-sm bg-white border border-gray-200 text-gray-600 disabled:opacity-40"
+                  >
+                    Next <ChevronRight size={15} />
+                  </button>
+                </div>
+              )}
+
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -575,6 +949,17 @@ export default function AdminPage() {
         onClose={() => setSelectedOrder(null)}
         onStatusChange={handleStatusChange}
       />
+
+      {menuForm && (
+        <MenuItemModal
+          item={menuForm}
+          categories={categories}
+          branches={branches}
+          onSave={handleMenuSave}
+          onClose={() => setMenuForm(null)}
+          saving={formSaving}
+        />
+      )}
     </>
   )
 }

@@ -157,10 +157,16 @@ alter table categories enable row level security;
 create policy "Public read categories"
   on categories for select using (true);
 
--- Menu items: public read
+-- Menu items: public read; admin can write (PIN-protected at app level)
 alter table menu_items enable row level security;
 create policy "Public read menu_items"
   on menu_items for select using (true);
+create policy "Admin can insert menu_items"
+  on menu_items for insert with check (true);
+create policy "Admin can update menu_items"
+  on menu_items for update using (true) with check (true);
+create policy "Admin can delete menu_items"
+  on menu_items for delete using (true);
 
 -- Orders: anyone can insert (place order), only service role can update
 alter table orders enable row level security;
