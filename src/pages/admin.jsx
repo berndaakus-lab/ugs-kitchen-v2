@@ -75,7 +75,7 @@ function LoginScreen({ onLogin }) {
     // ── Kitchen staff: look up in DB
     const { data, error: dbErr } = await supabase
       .from('staff')
-      .select('id, name, pin, role, is_active')
+      .select('id, name, pin, role, is_active, branch_id')
       .eq('username', u)
       .single()
 
@@ -98,7 +98,7 @@ function LoginScreen({ onLogin }) {
       return
     }
 
-    onLogin({ role: data.role, name: data.name })
+    onLogin({ role: data.role, name: data.name, branch_id: data.branch_id ?? null })
     setLoading(false)
   }
 
@@ -584,7 +584,12 @@ export default function AdminPage() {
       .lte('created_at', end)
       .order('created_at', { ascending: false })
 
-    if (branchFilter !== 'all') {
+    // Staff with an assigned branch: always lock to that branch
+    const staffBranch = currentUser?.branch_id
+    if (staffBranch) {
+      query = query.eq('branch_id', staffBranch)
+    } else if (branchFilter !== 'all') {
+      // Admin free-filtering by branch
       query = query.eq('branch_id', branchFilter)
     }
 
@@ -592,7 +597,7 @@ export default function AdminPage() {
     setOrders(data ?? [])
     setLoading(false)
     setRefreshing(false)
-  }, [selectedDate, branchFilter])
+  }, [selectedDate, branchFilter, currentUser])
 
   const fetchMenuItems = useCallback(async () => {
     setMenuLoading(true)
@@ -944,8 +949,15 @@ export default function AdminPage() {
             )}
           </div>
 
-          {/* Branch filter — only shown when multiple branches exist */}
-          {branches.length > 1 && (
+          {/* Branch filter — admin sees switcher; staff sees their locked branch label */}
+          {currentUser?.branch_id ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Branch</span>
+              <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-orange text-white">
+                {branches.find(b => b.id === currentUser.branch_id)?.name ?? 'Your Branch'}
+              </span>
+            </div>
+          ) : branches.length > 1 && (
             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
               <button
                 onClick={() => setBranchFilter('all')}
