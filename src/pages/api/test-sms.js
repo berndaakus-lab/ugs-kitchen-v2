@@ -1,6 +1,5 @@
 // GET /api/test-sms?to=0244XXXXXX
-// Temporary debug endpoint — remove before going live
-// Sends a test SMS and returns the full Nkomo response so we can see errors
+// DEBUG ONLY — disable in production by checking NEXT_PUBLIC_APP_URL or removing this file
 
 export default async function handler(req, res) {
   const to      = req.query.to
@@ -22,8 +21,8 @@ export default async function handler(req, res) {
   const clean = to.replace(/\D/g, '')
   const intl  = clean.startsWith('233') ? clean : '233' + clean.slice(1)
 
-  // Try without sender_id first to see if Nkomo uses account default
   const body = {
+    sender_id: sender,
     message:   'UGs Kitchen test SMS - if you see this it is working!',
     recipient: intl,
   }
