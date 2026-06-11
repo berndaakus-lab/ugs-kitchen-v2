@@ -26,23 +26,28 @@ function MenuCard({ item }) {
   const [imgError, setImgError] = useState(false)
 
   const hasImage = item.image && !imgError
+  const unavailable = !item.is_available
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-brand-muted flex flex-col active:scale-95 transition-transform">
+    <div className={`bg-white rounded-2xl overflow-hidden shadow-sm border border-brand-muted flex flex-col transition-transform ${unavailable ? 'opacity-70' : 'active:scale-95'}`}>
       <div className="relative w-full aspect-[4/3] bg-brand-muted">
         {hasImage ? (
           <Image
             src={item.image}
             alt={item.name}
             fill
-            className="object-cover"
+            className={`object-cover ${unavailable ? 'grayscale' : ''}`}
             sizes="(max-width: 640px) 50vw, 33vw"
             onError={() => setImgError(true)}
           />
         ) : (
           <ImagePlaceholder name={item.name} />
         )}
-        {item.is_popular && (
+        {unavailable ? (
+          <span className="absolute top-2 left-2 bg-gray-800/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+            Out of Stock
+          </span>
+        ) : item.is_popular && (
           <span className="absolute top-2 left-2 bg-brand-orange text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
             Popular
           </span>
@@ -56,13 +61,17 @@ function MenuCard({ item }) {
         {item.description && (
           <p className="text-xs text-gray-500 leading-snug">{item.description}</p>
         )}
-        <p className="text-brand-orange font-extrabold text-base mt-auto pt-1">
+        <p className={`font-extrabold text-base mt-auto pt-1 ${unavailable ? 'text-gray-400' : 'text-brand-orange'}`}>
           {formatGHS(item.price)}
         </p>
       </div>
 
       <div className="px-3 pb-3">
-        {qty === 0 ? (
+        {unavailable ? (
+          <div className="w-full flex items-center justify-center bg-gray-100 text-gray-400 font-bold rounded-xl py-2.5 text-xs">
+            Not Available
+          </div>
+        ) : qty === 0 ? (
           <button
             onClick={() => addItem(item)}
             className="w-full flex items-center justify-center gap-1 bg-brand-orange text-white font-bold rounded-xl py-2.5 text-sm active:bg-orange-700 transition-colors"
@@ -109,7 +118,7 @@ export default function MenuGrid({ menuItems, categories, loading }) {
 
   const grouped = categories.map(cat => ({
     ...cat,
-    items: menuItems.filter(item => item.category_id === cat.id && item.is_available),
+    items: menuItems.filter(item => item.category_id === cat.id),
   })).filter(cat => cat.items.length > 0)
 
   return (

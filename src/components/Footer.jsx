@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Instagram, Facebook } from 'lucide-react'
 
 // TikTok doesn't have a lucide icon — using a clean SVG inline
@@ -80,6 +81,12 @@ export default function Footer() {
             <span className="text-brand-orange font-semibold">UGs Kitchen</span>
             {' '}· Built with ❤️ in Ghana
           </p>
+          <Link
+            href="/admin"
+            className="mt-2 text-[11px] text-gray-600 hover:text-gray-400 transition-colors"
+          >
+            Kitchen Admin ›
+          </Link>
         </div>
       </div>
     </footer>

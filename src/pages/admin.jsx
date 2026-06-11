@@ -1,4 +1,5 @@
 import Head from 'next/head'
+import Link from 'next/link'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { sendSMSClient, smsPhone, STATUS_SMS } from '../lib/sms'
@@ -85,6 +86,13 @@ function LoginScreen({ onLogin }) {
             Enter
           </button>
         </form>
+
+        <Link
+          href="/"
+          className="block mt-5 text-xs text-gray-400 hover:text-gray-600 transition-colors text-center"
+        >
+          ← Back to Menu
+        </Link>
       </div>
     </div>
   )
