@@ -20,7 +20,7 @@ function formatMoMo(raw) {
 export default function OrderDrawer({ onPaymentSuccess }) {
   const { items, totalAmount, isOpen, closeDrawer, addItem, decrement, clearCart } = useCart()
   const { currentBranch } = useBranch()
-  const { silentSignIn } = useAuth()
+  const { customer, silentSignIn } = useAuth()
 
   // Delivery locations come from the branch record (JSONB array)
   const deliveryLocations = currentBranch?.delivery_locations ?? []
@@ -32,6 +32,14 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
   const drawerRef               = useRef(null)
+
+  // Auto-fill name from logged-in session when drawer opens
+  // MoMo number is intentionally left blank — customer may use a different number
+  useEffect(() => {
+    if (isOpen && customer) {
+      setName(prev => prev || customer.name)
+    }
+  }, [isOpen, customer])
 
   // Reset location when branch changes
   useEffect(() => { setLocation('') }, [currentBranch?.id])
@@ -253,6 +261,11 @@ export default function OrderDrawer({ onPaymentSuccess }) {
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
                 Your Name
+                {customer && name === customer.name && (
+                  <span className="ml-2 normal-case font-normal text-brand-orange">
+                    · from your account
+                  </span>
+                )}
               </label>
               <input
                 type="text"
@@ -298,7 +311,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
                 className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base font-semibold tracking-widest outline-none focus:border-brand-orange transition-colors"
               />
               <p className="text-[11px] text-gray-400 mt-1">
-                MTN, Vodafone, or AirtelTigo MoMo number
+                MTN, Vodafone, or AirtelTigo · SMS confirmation will be sent here
               </p>
             </div>
 
