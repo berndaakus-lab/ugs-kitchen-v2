@@ -1,7 +1,27 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, UtensilsCrossed, Clock } from 'lucide-react'
+import { msgReadyReminder } from '../lib/sms'
 
 const COUNTDOWN_SECS = 30 * 60 // 30 minutes
+const REMINDER_KEY   = 'ugs_reminder' // localStorage key
+
+// Fire the reminder SMS via our server-side endpoint
+async function fireReminderSMS(order) {
+  try {
+    await fetch('/api/send-sms', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        to:      order.momo_number,
+        message: msgReadyReminder(order),
+      }),
+    })
+  } catch {
+    // Silent — best effort
+  }
+  // Clear the localStorage backup once sent
+  localStorage.removeItem(REMINDER_KEY)
+}
 
 function formatGHS(amount) {
   return `GH₵ ${Number(amount).toFixed(2)}`
@@ -19,11 +39,19 @@ export default function PayStatus({ order, onDismiss }) {
 
   useEffect(() => {
     if (!order) return
+
+    // Save reminder target time + order to localStorage as a backup.
+    // If the customer dismisses this screen early, the backup fires on next app open.
+    const fireAt = Date.now() + COUNTDOWN_SECS * 1000
+    localStorage.setItem(REMINDER_KEY, JSON.stringify({ fireAt, order }))
+
     const interval = setInterval(() => {
       setRemaining(prev => {
         if (prev <= 1) {
           clearInterval(interval)
           setDone(true)
+          // ── Fire reminder SMS from client using device time ──
+          fireReminderSMS(order)
           return 0
         }
         return prev - 1
