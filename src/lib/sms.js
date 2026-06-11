@@ -37,7 +37,7 @@ export async function sendSMS({ to, message }) {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        sender:    senderId,
+        sender_id: senderId,
         message,
         recipient: recipient,
       }),
