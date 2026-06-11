@@ -33,8 +33,8 @@ export async function sendSMS({ to, message }) {
     const res = await fetch('https://app.nkomosms.com/api/v3/sms/send', {
       method:  'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'api-key':       apiKey,
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         sender:     senderId,

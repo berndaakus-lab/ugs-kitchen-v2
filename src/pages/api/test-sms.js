@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   try {
     const r = await fetch('https://app.nkomosms.com/api/v3/sms/send', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body:    JSON.stringify(body),
     })
     status = r.status
