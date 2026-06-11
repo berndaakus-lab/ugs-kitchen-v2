@@ -30,7 +30,7 @@ export default async function handler(req, res) {
 
   let raw, status
   try {
-    const r = await fetch('https://api.nkomosms.com/api/v3/sms/send', {
+    const r = await fetch('https://app.nkomosms.com/api/v3/sms/send', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
       body:    JSON.stringify(body),

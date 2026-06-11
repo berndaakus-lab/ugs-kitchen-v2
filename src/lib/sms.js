@@ -30,7 +30,7 @@ export async function sendSMS({ to, message }) {
   }
 
   try {
-    const res = await fetch('https://api.nkomosms.com/api/v3/sms/send', {
+    const res = await fetch('https://app.nkomosms.com/api/v3/sms/send', {
       method:  'POST',
       headers: {
         'Content-Type': 'application/json',
