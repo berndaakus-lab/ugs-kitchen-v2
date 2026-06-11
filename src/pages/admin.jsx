@@ -7,7 +7,8 @@ import {
   ShoppingBag, Clock, XCircle,
   TrendingUp, RefreshCw, LogOut, Eye,
   Star, CheckCircle2, Trash2, MessageSquare,
-  UtensilsCrossed, Plus, Pencil, ChevronLeft, ChevronRight, X, ToggleLeft, ToggleRight
+  UtensilsCrossed, Plus, Pencil, ChevronLeft, ChevronRight, X, ToggleLeft, ToggleRight,
+  Users, ShieldCheck, ShieldOff
 } from 'lucide-react'
 
 const STATUS_STYLES = {
@@ -46,17 +47,59 @@ function formatDate(ts) {
 
 // ── Login Screen ──────────────────────────────────────────────
 function LoginScreen({ onLogin }) {
-  const [pin, setPin]       = useState('')
-  const [error, setError]   = useState('')
+  const [username, setUsername] = useState('')
+  const [pin,      setPin]      = useState('')
+  const [error,    setError]    = useState('')
+  const [loading,  setLoading]  = useState(false)
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
-    if (pin === process.env.NEXT_PUBLIC_ADMIN_PIN) {
-      onLogin()
-    } else {
-      setError('Wrong PIN. Try again.')
-      setPin('')
+    setError('')
+    setLoading(true)
+
+    const u = username.trim().toLowerCase()
+    const adminUser = (process.env.NEXT_PUBLIC_ADMIN_USERNAME || 'admin').toLowerCase()
+
+    // ── Admin: match env credentials
+    if (u === adminUser) {
+      if (pin === process.env.NEXT_PUBLIC_ADMIN_PIN) {
+        onLogin({ role: 'admin', name: 'Admin' })
+      } else {
+        setError('Wrong PIN. Try again.')
+        setPin('')
+      }
+      setLoading(false)
+      return
     }
+
+    // ── Kitchen staff: look up in DB
+    const { data, error: dbErr } = await supabase
+      .from('staff')
+      .select('id, name, pin, role, is_active')
+      .eq('username', u)
+      .single()
+
+    if (dbErr || !data) {
+      setError('Account not found.')
+      setLoading(false)
+      setPin('')
+      return
+    }
+    if (!data.is_active) {
+      setError('Account is disabled. Contact admin.')
+      setLoading(false)
+      setPin('')
+      return
+    }
+    if (data.pin !== pin) {
+      setError('Wrong PIN. Try again.')
+      setLoading(false)
+      setPin('')
+      return
+    }
+
+    onLogin({ role: data.role, name: data.name })
+    setLoading(false)
   }
 
   return (
@@ -65,25 +108,36 @@ function LoginScreen({ onLogin }) {
         <div className="w-14 h-14 bg-brand-orange rounded-2xl flex items-center justify-center mx-auto mb-4">
           <span className="text-white font-extrabold text-2xl">U</span>
         </div>
-        <h1 className="text-xl font-extrabold text-brand-dark mb-1">Admin Access</h1>
-        <p className="text-xs text-gray-400 mb-6">UGs Kitchen · Owner Only</p>
+        <h1 className="text-xl font-extrabold text-brand-dark mb-1">Kitchen Staff Login</h1>
+        <p className="text-xs text-gray-400 mb-6">UGs Kitchen · Staff &amp; Admin</p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            type="text"
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            placeholder="Username"
+            autoCapitalize="none"
+            className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-center font-bold text-sm outline-none focus:border-brand-orange transition-colors"
+            autoFocus
+            required
+          />
           <input
             type="password"
             inputMode="numeric"
             value={pin}
             onChange={e => setPin(e.target.value)}
-            placeholder="Enter PIN"
+            placeholder="PIN"
             className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-center text-2xl tracking-widest font-bold outline-none focus:border-brand-orange transition-colors"
-            autoFocus
+            required
           />
           {error && <p className="text-red-500 text-sm font-semibold">{error}</p>}
           <button
             type="submit"
-            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-orange-700 transition-colors"
+            disabled={loading}
+            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-orange-700 disabled:opacity-60 transition-colors"
           >
-            Enter
+            {loading ? 'Checking…' : 'Enter'}
           </button>
         </form>
 
@@ -359,9 +413,111 @@ function MenuItemModal({ item, categories, branches, onSave, onClose, saving }) 
   )
 }
 
+// ── Staff Form Modal ──────────────────────────────────────────
+function StaffFormModal({ item, onSave, onClose, saving }) {
+  const isNew = !item.id
+  const [form, setForm] = useState(item)
+  function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (!form.name.trim() || !form.username.trim()) return
+    if (isNew && !form.pin) return
+    onSave(form)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center" onClick={onClose}>
+      <div
+        className="bg-white rounded-t-3xl w-full max-w-lg p-6 animate-slide-up max-h-[90dvh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-extrabold">{isNew ? 'Add Staff Account' : 'Edit Staff'}</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-brand-muted flex items-center justify-center">
+            <X size={16} className="text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Full Name *</label>
+            <input
+              value={form.name}
+              onChange={e => set('name', e.target.value)}
+              placeholder="e.g. Ama Boateng"
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Username *</label>
+            <input
+              value={form.username}
+              onChange={e => set('username', e.target.value.toLowerCase())}
+              placeholder="e.g. ama"
+              autoCapitalize="none"
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
+              PIN {isNew ? '*' : '(leave blank to keep current)'}
+            </label>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={form.pin}
+              onChange={e => set('pin', e.target.value)}
+              placeholder="4-digit PIN"
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-center text-xl tracking-widest font-bold outline-none focus:border-brand-orange"
+              required={isNew}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Role *</label>
+            <div className="flex gap-3">
+              {['staff', 'admin'].map(r => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => set('role', r)}
+                  className={`flex-1 py-2.5 rounded-xl font-bold text-sm border-2 transition-colors
+                    ${form.role === r
+                      ? r === 'admin' ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-blue-400 bg-blue-50 text-blue-600'
+                      : 'border-gray-200 bg-white text-gray-500'}`}
+                >
+                  {r === 'admin' ? '🛡 Admin' : '👨‍🍳 Kitchen Staff'}
+                </button>
+              ))}
+            </div>
+            {form.role === 'admin' && (
+              <p className="text-[11px] text-brand-orange font-semibold mt-2">
+                ⚠️ Admin can access all tabs including Menu, Reviews, and Staff management.
+              </p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-orange-700 disabled:opacity-60 transition-colors"
+          >
+            {saving ? 'Saving…' : isNew ? 'Create Account' : 'Save Changes'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Admin Dashboard ──────────────────────────────────────
 export default function AdminPage() {
-  const [authed,         setAuthed]         = useState(false)
+  const [currentUser,    setCurrentUser]    = useState(null)   // { role, name }
   const [activeTab,      setActiveTab]      = useState('orders')
   const [orders,         setOrders]         = useState([])
   const [loading,        setLoading]        = useState(true)
@@ -385,12 +541,20 @@ export default function AdminPage() {
   const [menuForm,    setMenuForm]    = useState(null)   // null=closed, {}=add, item=edit
   const [formSaving,  setFormSaving]  = useState(false)
 
+  // Staff tab state (admin only)
+  const [staffList,    setStaffList]    = useState([])
+  const [staffLoading, setStaffLoading] = useState(false)
+  const [staffForm,    setStaffForm]    = useState(null)  // null=closed, {}=add, item=edit
+  const [staffSaving,  setStaffSaving]  = useState(false)
+
+  const isAdmin = currentUser?.role === 'admin'
+
   // Load branches once on login
   useEffect(() => {
-    if (!authed) return
+    if (!currentUser) return
     supabase.from('branches').select('id, name, slug').eq('is_active', true).order('sort_order')
       .then(({ data }) => setBranches(data ?? []))
-  }, [authed])
+  }, [currentUser])
 
   const fetchOrders = useCallback(async () => {
     setRefreshing(true)
@@ -445,23 +609,23 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => {
-    if (authed) { fetchOrders(); fetchReviews() }
-  }, [authed, fetchOrders, fetchReviews])
+    if (currentUser) { fetchOrders(); fetchReviews() }
+  }, [currentUser, fetchOrders, fetchReviews])
 
   useEffect(() => {
-    if (authed && activeTab === 'menu') { fetchMenuItems(); fetchCategories() }
-  }, [authed, activeTab, fetchMenuItems, fetchCategories])
+    if (currentUser && activeTab === 'menu') { fetchMenuItems(); fetchCategories() }
+  }, [currentUser, activeTab, fetchMenuItems, fetchCategories])
 
   // Realtime — new orders and reviews appear instantly
   useEffect(() => {
-    if (!authed) return
+    if (!currentUser) return
     const channel = supabase
       .channel('admin-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchOrders)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, fetchReviews)
       .subscribe()
     return () => channel.unsubscribe()
-  }, [authed, fetchOrders, fetchReviews])
+  }, [currentUser, fetchOrders, fetchReviews])
 
   async function handleApproveReview(id, current) {
     await supabase.from('reviews').update({ is_approved: !current }).eq('id', id)
@@ -508,6 +672,53 @@ export default function AdminPage() {
     fetchMenuItems()
   }
 
+  // ── Staff CRUD ────────────────────────────────────────────────
+  const fetchStaff = useCallback(async () => {
+    setStaffLoading(true)
+    const { data } = await supabase
+      .from('staff')
+      .select('id, name, username, role, is_active, created_at')
+      .order('created_at', { ascending: false })
+    setStaffList(data ?? [])
+    setStaffLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (currentUser && activeTab === 'staff' && isAdmin) fetchStaff()
+  }, [currentUser, activeTab, isAdmin, fetchStaff])
+
+  async function handleStaffSave(form) {
+    setStaffSaving(true)
+    const payload = {
+      name:      form.name.trim(),
+      username:  form.username.trim().toLowerCase(),
+      pin:       form.pin,
+      role:      form.role,
+      is_active: form.is_active,
+    }
+    if (form.id) {
+      // Don't overwrite pin if left blank on edit
+      if (!form.pin) delete payload.pin
+      await supabase.from('staff').update(payload).eq('id', form.id)
+    } else {
+      await supabase.from('staff').insert(payload)
+    }
+    setStaffSaving(false)
+    setStaffForm(null)
+    fetchStaff()
+  }
+
+  async function handleStaffDelete(id) {
+    if (!confirm('Remove this staff account permanently?')) return
+    await supabase.from('staff').delete().eq('id', id)
+    fetchStaff()
+  }
+
+  async function handleStaffToggle(member) {
+    await supabase.from('staff').update({ is_active: !member.is_active }).eq('id', member.id)
+    fetchStaff()
+  }
+
   async function handleStatusChange(orderId, newStatus) {
     await supabase.from('orders').update({ status: newStatus }).eq('id', orderId)
 
@@ -525,7 +736,7 @@ export default function AdminPage() {
     fetchOrders()
   }
 
-  if (!authed) return <LoginScreen onLogin={() => setAuthed(true)} />
+  if (!currentUser) return <LoginScreen onLogin={user => setCurrentUser(user)} />
 
   const filtered = statusFilter === 'all'
     ? orders
@@ -561,7 +772,7 @@ export default function AdminPage() {
                 <RefreshCw size={16} className="text-brand-dark" />
               </button>
               <button
-                onClick={() => setAuthed(false)}
+                onClick={() => setCurrentUser(null)}
                 className="w-9 h-9 rounded-xl bg-brand-muted flex items-center justify-center"
               >
                 <LogOut size={16} className="text-brand-dark" />
@@ -570,40 +781,62 @@ export default function AdminPage() {
           </div>
         </header>
 
+        {/* Role badge */}
+        <div className="max-w-lg mx-auto px-4 pt-2">
+          <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full
+            ${isAdmin ? 'bg-brand-orange/10 text-brand-orange' : 'bg-blue-50 text-blue-600'}`}>
+            {isAdmin ? <ShieldCheck size={11} /> : <Users size={11} />}
+            {isAdmin ? `Admin · ${currentUser.name}` : `Staff · ${currentUser.name}`}
+          </span>
+        </div>
+
         {/* Tab switcher */}
-        <div className="max-w-lg mx-auto px-4 pt-3 flex gap-2">
+        <div className="max-w-lg mx-auto px-4 pt-2 flex gap-2 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('orders')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
+            className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
               ${activeTab === 'orders' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
           >
             <ShoppingBag size={15} /> Orders
           </button>
-          <button
-            onClick={() => setActiveTab('reviews')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
-              ${activeTab === 'reviews' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
-          >
-            <MessageSquare size={15} /> Reviews
-            {reviews.filter(r => r.is_approved).length > 0 && (
-              <span className="bg-brand-orange text-white text-[10px] font-extrabold rounded-full w-4 h-4 flex items-center justify-center">
-                {reviews.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('menu')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
-              ${activeTab === 'menu' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
-          >
-            <UtensilsCrossed size={15} /> Menu
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('reviews')}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
+                ${activeTab === 'reviews' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+            >
+              <MessageSquare size={15} /> Reviews
+              {reviews.length > 0 && (
+                <span className="bg-brand-orange text-white text-[10px] font-extrabold rounded-full w-4 h-4 flex items-center justify-center">
+                  {reviews.length}
+                </span>
+              )}
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('menu')}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
+                ${activeTab === 'menu' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+            >
+              <UtensilsCrossed size={15} /> Menu
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('staff')}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
+                ${activeTab === 'staff' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+            >
+              <Users size={15} /> Staff
+            </button>
+          )}
         </div>
 
         <div className="max-w-lg mx-auto px-4 py-5 space-y-5">
 
           {/* ── REVIEWS TAB ─────────────────────────────────── */}
-          {activeTab === 'reviews' && (
+          {activeTab === 'reviews' && isAdmin && (
             <div className="space-y-3">
               {reviewsLoading ? (
                 [...Array(3)].map((_, i) => (
@@ -810,7 +1043,7 @@ export default function AdminPage() {
           </> /* end orders tab */}
 
           {/* ── MENU TAB ────────────────────────────────────── */}
-          {activeTab === 'menu' && (
+          {activeTab === 'menu' && isAdmin && (
             <div className="space-y-4">
 
               {/* Branch filter + Add button */}
@@ -949,6 +1182,92 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* ── STAFF TAB ────────────────────────────────────── */}
+          {activeTab === 'staff' && isAdmin && (
+            <div className="space-y-4">
+
+              {/* Header row */}
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-400 font-semibold">{staffList.length} staff member{staffList.length !== 1 ? 's' : ''}</p>
+                <button
+                  onClick={() => setStaffForm({ name: '', username: '', pin: '', role: 'staff', is_active: true })}
+                  className="flex items-center gap-1.5 bg-brand-orange text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-orange-700"
+                >
+                  <Plus size={15} /> Add Staff
+                </button>
+              </div>
+
+              {/* Staff list */}
+              {staffLoading ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="bg-white rounded-2xl h-16 animate-pulse" />
+                  ))}
+                </div>
+              ) : staffList.length === 0 ? (
+                <div className="text-center py-16">
+                  <Users size={40} className="text-gray-200 mx-auto mb-3" />
+                  <p className="text-gray-400 font-semibold">No staff accounts yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {staffList.map(member => (
+                    <div key={member.id} className="bg-white rounded-2xl p-4 border border-brand-muted shadow-sm">
+                      <div className="flex items-center gap-3">
+                        {/* Avatar */}
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-extrabold text-sm
+                          ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : 'bg-blue-50 text-blue-600'}`}>
+                          {member.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-brand-dark text-sm">{member.name}</p>
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full
+                              ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : 'bg-blue-50 text-blue-600'}`}>
+                              {member.role === 'admin' ? '🛡 Admin' : '👨‍🍳 Staff'}
+                            </span>
+                            {!member.is_active && (
+                              <span className="text-[10px] font-bold bg-red-50 text-red-400 px-2 py-0.5 rounded-full">Disabled</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400">@{member.username}</p>
+                        </div>
+                        {/* Inline actions */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => handleStaffToggle(member)}
+                            title={member.is_active ? 'Disable account' : 'Enable account'}
+                            className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center active:bg-gray-200"
+                          >
+                            {member.is_active
+                              ? <ShieldCheck size={15} className="text-green-500" />
+                              : <ShieldOff   size={15} className="text-gray-400" />
+                            }
+                          </button>
+                          <button
+                            onClick={() => setStaffForm({ ...member, pin: '' })}
+                            title="Edit"
+                            className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center active:bg-gray-200"
+                          >
+                            <Pencil size={14} className="text-gray-500" />
+                          </button>
+                          <button
+                            onClick={() => handleStaffDelete(member.id)}
+                            title="Delete"
+                            className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center active:bg-red-100"
+                          >
+                            <Trash2 size={14} className="text-red-400" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -966,6 +1285,15 @@ export default function AdminPage() {
           onSave={handleMenuSave}
           onClose={() => setMenuForm(null)}
           saving={formSaving}
+        />
+      )}
+
+      {staffForm && (
+        <StaffFormModal
+          item={staffForm}
+          onSave={handleStaffSave}
+          onClose={() => setStaffForm(null)}
+          saving={staffSaving}
         />
       )}
     </>

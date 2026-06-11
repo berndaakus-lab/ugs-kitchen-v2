@@ -30,6 +30,7 @@ drop table if exists menu_items cascade;
 drop table if exists categories cascade;
 drop table if exists branches   cascade;
 drop table if exists customers  cascade;
+drop table if exists staff      cascade;
 
 -- Drop storage policies if bucket already exists
 drop policy if exists "Public can view menu images"  on storage.objects;
@@ -39,6 +40,35 @@ drop policy if exists "Owner can delete menu images" on storage.objects;
 
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
+
+-- ─── STAFF ───────────────────────────────────────────────────
+-- Kitchen staff who can log into the admin dashboard.
+-- Role 'staff'  → Orders tab only
+-- Role 'admin'  → All tabs (Orders, Reviews, Menu, Staff)
+-- The master admin account is stored in env vars (NEXT_PUBLIC_ADMIN_USERNAME / NEXT_PUBLIC_ADMIN_PIN)
+-- and does NOT need a row here.
+
+create table if not exists staff (
+  id         uuid primary key default uuid_generate_v4(),
+  name       text    not null,
+  username   text    not null unique,
+  pin        text    not null,
+  role       text    not null default 'staff' check (role in ('admin','staff')),
+  is_active  boolean not null default true,
+  created_at timestamptz default now()
+);
+
+alter table staff enable row level security;
+-- Anon key can read staff (needed for login verification — PIN is app-level protected)
+create policy "Public can read staff for login"
+  on staff for select using (true);
+-- Only via anon key (admin PIN-gated at app level) can manage staff
+create policy "Admin can insert staff"
+  on staff for insert with check (true);
+create policy "Admin can update staff"
+  on staff for update using (true) with check (true);
+create policy "Admin can delete staff"
+  on staff for delete using (true);
 
 -- ─── BRANCHES ────────────────────────────────────────────────
 create table if not exists branches (
