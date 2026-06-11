@@ -1,6 +1,7 @@
 import Head from 'next/head'
 import Link from 'next/link'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { sendSMSClient, smsPhone, STATUS_SMS } from '../lib/sms'
 import {
@@ -8,7 +9,7 @@ import {
   TrendingUp, RefreshCw, LogOut, Eye,
   Star, CheckCircle2, Trash2, MessageSquare,
   UtensilsCrossed, Plus, Pencil, ChevronLeft, ChevronRight, X, ToggleLeft, ToggleRight,
-  Users, ShieldCheck, ShieldOff
+  Users, ShieldCheck, ShieldOff, Download, FileSpreadsheet, CalendarDays, Calendar
 } from 'lucide-react'
 
 const STATUS_STYLES = {
@@ -43,6 +44,36 @@ function formatTime(ts) {
 
 function formatDate(ts) {
   return new Date(ts).toLocaleDateString('en-GH', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+// ── Export helpers ────────────────────────────────────────────
+function ordersToRows(orders, branchName = '') {
+  return orders.map(o => ({
+    'Order ID':      `#${String(o.id).slice(-6).toUpperCase()}`,
+    'Date':          new Date(o.created_at).toLocaleDateString('en-GH'),
+    'Time':          new Date(o.created_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' }),
+    'Customer':      o.customer_name,
+    'Location':      o.delivery_location,
+    'MoMo Number':   o.momo_number,
+    'Items':         (o.items ?? []).map(i => `${i.quantity}x ${i.name}`).join(', '),
+    'Total (GH₵)':   Number(o.total_amount).toFixed(2),
+    'Status':        o.status,
+    'Channel':       o.payment_channel ?? '',
+    'Branch':        branchName || o.branch_id || '',
+    'Notes':         o.notes ?? '',
+  }))
+}
+
+function downloadExcel(rows, filename) {
+  const ws = XLSX.utils.json_to_sheet(rows)
+  // Auto column widths
+  const colWidths = Object.keys(rows[0] ?? {}).map(k => ({
+    wch: Math.max(k.length, ...rows.map(r => String(r[k] ?? '').length), 10)
+  }))
+  ws['!cols'] = colWidths
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Orders')
+  XLSX.writeFile(wb, filename)
 }
 
 // ── Login Screen ──────────────────────────────────────────────
@@ -565,6 +596,62 @@ export default function AdminPage() {
 
   const isAdmin = currentUser?.role === 'admin'
 
+  // Export state
+  const [exportOpen,    setExportOpen]    = useState(false)
+  const [exporting,     setExporting]     = useState(false)
+  const exportRef = useRef(null)
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (exportRef.current && !exportRef.current.contains(e.target)) setExportOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  async function handleExport(type) {
+    setExportOpen(false)
+    setExporting(true)
+
+    const branchLabel = branches.find(b => b.id === (currentUser?.branch_id || branchFilter))?.name ?? ''
+
+    if (type === 'day') {
+      // Use already-loaded orders (already filtered by date + branch)
+      const rows = ordersToRows(orders, branchLabel)
+      if (!rows.length) { alert('No orders for this day.'); setExporting(false); return }
+      downloadExcel(rows, `UGs_Orders_${selectedDate}.xlsx`)
+    } else {
+      // Monthly: fetch full month
+      const [y, m] = selectedDate.split('-')
+      const start  = `${y}-${m}-01T00:00:00`
+      const lastDay = new Date(y, m, 0).getDate()
+      const end    = `${y}-${m}-${String(lastDay).padStart(2,'0')}T23:59:59`
+
+      let query = supabase
+        .from('orders')
+        .select('*')
+        .gte('created_at', start)
+        .lte('created_at', end)
+        .order('created_at', { ascending: false })
+
+      const staffBranch = currentUser?.branch_id
+      if (staffBranch) {
+        query = query.eq('branch_id', staffBranch)
+      } else if (branchFilter !== 'all') {
+        query = query.eq('branch_id', branchFilter)
+      }
+
+      const { data } = await query
+      const rows = ordersToRows(data ?? [], branchLabel)
+      if (!rows.length) { alert('No orders for this month.'); setExporting(false); return }
+      const monthLabel = new Date(`${y}-${m}-01`).toLocaleDateString('en-GH', { month: 'long', year: 'numeric' })
+      downloadExcel(rows, `UGs_Orders_${y}-${m}.xlsx`)
+    }
+
+    setExporting(false)
+  }
+
   // Load branches once on login
   useEffect(() => {
     if (!currentUser) return
@@ -929,7 +1016,7 @@ export default function AdminPage() {
           {/* ── ORDERS TAB ──────────────────────────────────── */}
           {activeTab === 'orders' && <>
 
-          {/* Date picker + Branch filter */}
+          {/* Date picker + Export */}
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <input
@@ -946,6 +1033,54 @@ export default function AdminPage() {
               >
                 Today
               </button>
+            )}
+            {/* Export button — admin only */}
+            {isAdmin && (
+              <div className="relative flex-shrink-0" ref={exportRef}>
+                <button
+                  onClick={() => setExportOpen(o => !o)}
+                  disabled={exporting}
+                  className="flex items-center gap-1.5 px-3 py-2.5 bg-white border-2 border-gray-200 text-brand-dark font-bold text-sm rounded-xl active:bg-gray-50 disabled:opacity-50"
+                  title="Export report"
+                >
+                  {exporting
+                    ? <RefreshCw size={15} className="animate-spin" />
+                    : <Download size={15} />
+                  }
+                  <span className="hidden sm:inline">Export</span>
+                </button>
+
+                {exportOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-2xl shadow-xl border border-brand-muted z-50 overflow-hidden">
+                    <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 px-4 pt-3 pb-1">Export as Excel</p>
+                    <button
+                      onClick={() => handleExport('day')}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
+                    >
+                      <CalendarDays size={16} className="text-brand-orange flex-shrink-0" />
+                      <div className="text-left">
+                        <p className="font-bold">Daily Report</p>
+                        <p className="text-xs text-gray-400">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                      </div>
+                    </button>
+                    <div className="border-t border-gray-100" />
+                    <button
+                      onClick={() => handleExport('month')}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
+                    >
+                      <Calendar size={16} className="text-brand-orange flex-shrink-0" />
+                      <div className="text-left">
+                        <p className="font-bold">Monthly Report</p>
+                        <p className="text-xs text-gray-400">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GH', { month: 'long', year: 'numeric' })}</p>
+                      </div>
+                    </button>
+                    <div className="border-t border-gray-100" />
+                    <p className="text-[10px] text-gray-400 px-4 py-2 leading-relaxed">
+                      Downloads an .xlsx file you can open in Excel or Google Sheets.
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
