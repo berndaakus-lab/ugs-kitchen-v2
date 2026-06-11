@@ -55,8 +55,12 @@ create table if not exists staff (
   pin        text    not null,
   role       text    not null default 'staff' check (role in ('admin','staff')),
   is_active  boolean not null default true,
+  branch_id  uuid references branches(id) on delete set null,
   created_at timestamptz default now()
 );
+
+-- If table already exists, add branch_id safely:
+alter table staff add column if not exists branch_id uuid references branches(id) on delete set null;
 
 alter table staff enable row level security;
 -- Anon key can read staff (needed for login verification — PIN is app-level protected)

@@ -414,7 +414,7 @@ function MenuItemModal({ item, categories, branches, onSave, onClose, saving }) 
 }
 
 // ── Staff Form Modal ──────────────────────────────────────────
-function StaffFormModal({ item, onSave, onClose, saving }) {
+function StaffFormModal({ item, branches, onSave, onClose, saving }) {
   const isNew = !item.id
   const [form, setForm] = useState(item)
   function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
@@ -476,6 +476,21 @@ function StaffFormModal({ item, onSave, onClose, saving }) {
               className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-center text-xl tracking-widest font-bold outline-none focus:border-brand-orange"
               required={isNew}
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Assigned Branch</label>
+            <select
+              value={form.branch_id ?? ''}
+              onChange={e => set('branch_id', e.target.value)}
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange bg-white"
+            >
+              <option value="">All Branches</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">Staff will only see orders for their assigned branch.</p>
           </div>
 
           <div>
@@ -546,6 +561,7 @@ export default function AdminPage() {
   const [staffLoading, setStaffLoading] = useState(false)
   const [staffForm,    setStaffForm]    = useState(null)  // null=closed, {}=add, item=edit
   const [staffSaving,  setStaffSaving]  = useState(false)
+  const [staffError,   setStaffError]   = useState('')
 
   const isAdmin = currentUser?.role === 'admin'
 
@@ -675,11 +691,16 @@ export default function AdminPage() {
   // ── Staff CRUD ────────────────────────────────────────────────
   const fetchStaff = useCallback(async () => {
     setStaffLoading(true)
-    const { data } = await supabase
+    setStaffError('')
+    const { data, error: err } = await supabase
       .from('staff')
-      .select('id, name, username, role, is_active, created_at')
+      .select('id, name, username, role, is_active, branch_id, created_at, branches(name)')
       .order('created_at', { ascending: false })
-    setStaffList(data ?? [])
+    if (err) {
+      setStaffError(err.message)
+    } else {
+      setStaffList(data ?? [])
+    }
     setStaffLoading(false)
   }, [])
 
@@ -689,19 +710,22 @@ export default function AdminPage() {
 
   async function handleStaffSave(form) {
     setStaffSaving(true)
+    setStaffError('')
     const payload = {
       name:      form.name.trim(),
       username:  form.username.trim().toLowerCase(),
       pin:       form.pin,
       role:      form.role,
-      is_active: form.is_active,
+      is_active: true,
+      branch_id: form.branch_id || null,
     }
     if (form.id) {
-      // Don't overwrite pin if left blank on edit
-      if (!form.pin) delete payload.pin
-      await supabase.from('staff').update(payload).eq('id', form.id)
+      if (!form.pin) delete payload.pin   // keep existing PIN if blank on edit
+      const { error: err } = await supabase.from('staff').update(payload).eq('id', form.id)
+      if (err) { setStaffError(err.message); setStaffSaving(false); return }
     } else {
-      await supabase.from('staff').insert(payload)
+      const { error: err } = await supabase.from('staff').insert(payload)
+      if (err) { setStaffError(err.message); setStaffSaving(false); return }
     }
     setStaffSaving(false)
     setStaffForm(null)
@@ -1188,14 +1212,27 @@ export default function AdminPage() {
 
               {/* Header row */}
               <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-400 font-semibold">{staffList.length} staff member{staffList.length !== 1 ? 's' : ''}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-gray-400 font-semibold">{staffList.length} staff member{staffList.length !== 1 ? 's' : ''}</p>
+                  <button onClick={fetchStaff} className={`w-7 h-7 rounded-lg bg-brand-muted flex items-center justify-center ${staffLoading ? 'animate-spin' : ''}`}>
+                    <RefreshCw size={13} className="text-brand-dark" />
+                  </button>
+                </div>
                 <button
-                  onClick={() => setStaffForm({ name: '', username: '', pin: '', role: 'staff', is_active: true })}
+                  onClick={() => setStaffForm({ name: '', username: '', pin: '', role: 'staff', is_active: true, branch_id: '' })}
                   className="flex items-center gap-1.5 bg-brand-orange text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-orange-700"
                 >
                   <Plus size={15} /> Add Staff
                 </button>
               </div>
+
+              {/* Error banner */}
+              {staffError && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-sm text-red-600 font-semibold">
+                  ⚠️ {staffError}
+                  <p className="text-xs font-normal mt-1 text-red-400">Make sure the staff table SQL has been run in Supabase.</p>
+                </div>
+              )}
 
               {/* Staff list */}
               {staffLoading ? (
@@ -1230,7 +1267,12 @@ export default function AdminPage() {
                               <span className="text-[10px] font-bold bg-red-50 text-red-400 px-2 py-0.5 rounded-full">Disabled</span>
                             )}
                           </div>
-                          <p className="text-xs text-gray-400">@{member.username}</p>
+                          <p className="text-xs text-gray-400">
+                            @{member.username}
+                            {member.branches?.name && (
+                              <> · <span className="text-brand-orange">{member.branches.name.replace('UGs Kitchen — ', '')}</span></>
+                            )}
+                          </p>
                         </div>
                         {/* Inline actions */}
                         <div className="flex items-center gap-1 flex-shrink-0">
@@ -1245,7 +1287,7 @@ export default function AdminPage() {
                             }
                           </button>
                           <button
-                            onClick={() => setStaffForm({ ...member, pin: '' })}
+                            onClick={() => setStaffForm({ ...member, pin: '', branch_id: member.branch_id ?? '' })}
                             title="Edit"
                             className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center active:bg-gray-200"
                           >
@@ -1291,6 +1333,7 @@ export default function AdminPage() {
       {staffForm && (
         <StaffFormModal
           item={staffForm}
+          branches={branches}
           onSave={handleStaffSave}
           onClose={() => setStaffForm(null)}
           saving={staffSaving}
