@@ -67,7 +67,6 @@ export default function Home() {
           .from('menu_items')
           .select('*')
           .eq('branch_id', currentBranch.id)
-          .eq('is_available', true)
           .order('sort_order'),
       ])
       setCategories(cats ?? [])
