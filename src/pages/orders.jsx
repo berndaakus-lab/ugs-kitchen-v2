@@ -64,7 +64,6 @@ export default function OrdersPage() {
   }
 
   function handleReorder(order) {
-    // Add all items from the order back to cart
     const items = order.items ?? []
     items.forEach(item => {
       for (let i = 0; i < item.quantity; i++) {
@@ -72,8 +71,8 @@ export default function OrdersPage() {
       }
     })
     setReordered(order.id)
-    // Go back to home so they can see the cart
-    setTimeout(() => router.push('/'), 600)
+    // Navigate home and auto-open the cart drawer so customer sees their items
+    setTimeout(() => router.push('/?opencart=1'), 600)
   }
 
   // Show spinner while auth session is being read from localStorage,

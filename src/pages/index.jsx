@@ -1,5 +1,5 @@
 import Head from 'next/head'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { ShoppingBag, MapPin, ChevronDown, User, LogOut, History } from 'lucide-react'
 import Link from 'next/link'
@@ -22,6 +22,7 @@ export default function Home() {
   const [paidOrder,   setPaidOrder]   = useState(null)
   const [showAuth, setShowAuth] = useState(false)
   const router = useRouter()
+  const prevBranchId = useRef(null)
 
   const { totalItems, openDrawer, clearCart } = useCart()
   const { currentBranch, switchBranch, loading: branchLoading } = useBranch()
@@ -35,10 +36,25 @@ export default function Home() {
     }
   }, [router.query.signin])
 
+  // Auto-open cart drawer when redirected back from reorder
+  useEffect(() => {
+    if (router.query.opencart === '1') {
+      openDrawer()
+      router.replace('/', undefined, { shallow: true })
+    }
+  }, [router.query.opencart])
+
   // Reload menu whenever branch changes
   useEffect(() => {
     if (!currentBranch) return
     setLoading(true)
+
+    // Only clear cart when branch actually switches — NOT on initial mount
+    // (reorder adds items before navigating back, we must not wipe them)
+    if (prevBranchId.current && prevBranchId.current !== currentBranch.id) {
+      clearCart()
+    }
+    prevBranchId.current = currentBranch.id
 
     async function loadMenu() {
       const [{ data: cats }, { data: items }] = await Promise.all([
@@ -60,7 +76,6 @@ export default function Home() {
     }
 
     loadMenu()
-    clearCart() // clear cart when switching branches
   }, [currentBranch])
 
   function handlePaymentSuccess(order) {
