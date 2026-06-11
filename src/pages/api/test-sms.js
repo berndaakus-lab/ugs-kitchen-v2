@@ -23,9 +23,9 @@ export default async function handler(req, res) {
   const intl  = clean.startsWith('233') ? clean : '233' + clean.slice(1)
 
   const body = {
-    sender:     sender,
-    message:    'UGs Kitchen test SMS - if you see this it is working!',
-    recipients: [intl],
+    sender:    sender,
+    message:   'UGs Kitchen test SMS - if you see this it is working!',
+    recipient: intl,
   }
 
   let raw, status
