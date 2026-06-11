@@ -4,7 +4,6 @@ import { useCart } from '../context/CartContext'
 import { useBranch } from '../context/BranchContext'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
-import { notifyOwner } from '../lib/whatsapp'
 
 function formatGHS(amount) {
   return `GH₵ ${Number(amount).toFixed(2)}`
@@ -123,7 +122,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       clearCart()
       closeDrawer()
       onPaymentSuccess(orderData)
-      notifyOwner(orderData, currentBranch)
+      // Owner + customer SMS are sent server-side via webhook.js / verify-payment.js
     }
 
     function handleFailed() {
