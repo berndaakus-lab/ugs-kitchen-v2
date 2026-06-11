@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
-import { sendSMS, msgOrderConfirmed, msgOwnerNewOrder } from '../../lib/sms'
+import { sendSMS, smsPhone, msgOrderConfirmed, msgOwnerNewOrder } from '../../lib/sms'
 
 // Disable Next.js body parsing — we need raw body for HMAC verification
 export const config = { api: { bodyParser: false } }
@@ -89,7 +89,7 @@ export default async function handler(req, res) {
         sendSMS({ to: ownerPhone, message: msgOwnerNewOrder(order, order.branches) })
       }
       // SMS to customer (confirmation + 30-min heads-up)
-      sendSMS({ to: order.momo_number, message: msgOrderConfirmed(order) })
+      sendSMS({ to: smsPhone(order), message: msgOrderConfirmed(order) })
     }
   }
 

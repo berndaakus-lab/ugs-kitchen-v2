@@ -3,6 +3,13 @@
 // API key is kept server-side in NKOMO_API_KEY
 // Sender ID set via NKOMO_SENDER_ID (e.g. "UGsKitchen") — max 11 chars, alphanumeric
 
+// Resolve which phone number to SMS for an order:
+// - Logged-in customer's account phone (may differ from MoMo used to pay)
+// - Falls back to MoMo number for guests
+export function smsPhone(order) {
+  return order.contact_phone || order.momo_number
+}
+
 // Convert Ghana local format (0244...) to international (233244...)
 export function toInternational(phone) {
   const clean = String(phone).replace(/\D/g, '')

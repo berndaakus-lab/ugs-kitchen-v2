@@ -1,7 +1,7 @@
 import Head from 'next/head'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { sendSMSClient, STATUS_SMS } from '../lib/sms'
+import { sendSMSClient, smsPhone, STATUS_SMS } from '../lib/sms'
 import {
   ShoppingBag, Clock, XCircle,
   TrendingUp, RefreshCw, LogOut, Eye,
@@ -279,9 +279,9 @@ export default function AdminPage() {
     // SMS the customer on key status changes
     const updatedOrder = { ...selectedOrder, status: newStatus }
     const msgBuilder = STATUS_SMS[newStatus]
-    if (msgBuilder && updatedOrder.momo_number) {
+    if (msgBuilder && smsPhone(updatedOrder)) {
       sendSMSClient({
-        to:      updatedOrder.momo_number,
+        to:      smsPhone(updatedOrder),
         message: msgBuilder(updatedOrder),
       })
     }

@@ -67,12 +67,17 @@ export default function OrderDrawer({ onPaymentSuccess }) {
     setLoading(true)
     try {
       // 1. Persist order to Supabase
+      // Use logged-in account phone for SMS (may differ from MoMo used to pay)
+      // Falls back to MoMo number if guest
+      const contactPhone = customer?.phone ?? phone
+
       const { data: order, error: dbErr } = await supabase
         .from('orders')
         .insert({
           customer_name:     name.trim(),
           delivery_location: location,
           momo_number:       phone,
+          contact_phone:     contactPhone,
           items:             items,
           total_amount:      totalAmount,
           status:            'pending',

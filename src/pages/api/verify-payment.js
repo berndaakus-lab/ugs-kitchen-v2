@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { createClient } from '@supabase/supabase-js'
-import { sendSMS, msgOrderConfirmed, msgOwnerNewOrder } from '../../lib/sms'
+import { sendSMS, smsPhone, msgOrderConfirmed, msgOwnerNewOrder } from '../../lib/sms'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
       // Only update if not already paid (avoid duplicate SMS if webhook fires too)
       const { data: existing } = await supabase
         .from('orders')
-        .select('status, momo_number, customer_name, delivery_location, total_amount, items, branches(name, phone)')
+        .select('status, momo_number, contact_phone, customer_name, delivery_location, total_amount, items, branches(name, phone)')
         .eq('id', orderId)
         .single()
 
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
         if (ownerPhone) {
           sendSMS({ to: ownerPhone, message: msgOwnerNewOrder(existing, existing.branches) })
         }
-        sendSMS({ to: existing.momo_number, message: msgOrderConfirmed(existing) })
+        sendSMS({ to: smsPhone(existing), message: msgOrderConfirmed(existing) })
       }
 
       return res.status(200).json({ status: 'paid' })

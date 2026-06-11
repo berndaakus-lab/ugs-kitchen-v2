@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, UtensilsCrossed, Clock } from 'lucide-react'
-import { msgReadyReminder } from '../lib/sms'
+import { msgReadyReminder, smsPhone } from '../lib/sms'
 
 const COUNTDOWN_SECS = 30 * 60 // 30 minutes
 const REMINDER_KEY   = 'ugs_reminder' // localStorage key
@@ -12,7 +12,7 @@ async function fireReminderSMS(order) {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
-        to:      order.momo_number,
+        to:      smsPhone(order),
         message: msgReadyReminder(order),
       }),
     })

@@ -24,7 +24,7 @@ function useReminderBackup() {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({
-            to:      order.momo_number,
+            to:      order.contact_phone || order.momo_number,
             message: `Hi ${order.customer_name}! ⏰ Your UGs Kitchen order should be ready very soon. Order #${String(order.id).slice(-6).toUpperCase()} — ${order.delivery_location}. We will SMS you once confirmed ready!`,
           }),
         }).catch(() => {})
@@ -36,7 +36,7 @@ function useReminderBackup() {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
-              to:      order.momo_number,
+              to:      order.contact_phone || order.momo_number,
               message: `Hi ${order.customer_name}! ⏰ Your UGs Kitchen order should be ready very soon. Order #${String(order.id).slice(-6).toUpperCase()} — ${order.delivery_location}. We will SMS you once confirmed ready!`,
             }),
           }).catch(() => {})
