@@ -22,8 +22,8 @@ export default async function handler(req, res) {
   const clean = to.replace(/\D/g, '')
   const intl  = clean.startsWith('233') ? clean : '233' + clean.slice(1)
 
+  // Try without sender_id first to see if Nkomo uses account default
   const body = {
-    sender_id: sender,
     message:   'UGs Kitchen test SMS - if you see this it is working!',
     recipient: intl,
   }
