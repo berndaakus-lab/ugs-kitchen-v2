@@ -22,9 +22,7 @@ export default function Footer() {
 
         {/* Logo + tagline */}
         <div className="flex flex-col items-center gap-1 text-center">
-          <div className="w-12 h-12 bg-brand-orange rounded-2xl flex items-center justify-center mb-1">
-            <span className="text-white font-extrabold text-2xl leading-none">U</span>
-          </div>
+          <img src="/logo-ugs.jpeg" alt="UGs Kitchen" className="w-12 h-12 object-contain mb-1" />
           <p className="font-extrabold text-lg leading-tight">UGs Kitchen</p>
           <p className="text-xs text-gray-400">Homemade Ghanaian Food, Fast Delivered</p>
         </div>

@@ -360,7 +360,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
           ) : (
             <button
               onClick={handlePlaceOrder}
-              className="w-full bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-lg active:bg-orange-700 transition-colors shadow-lg"
+              className="w-full bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-lg active:bg-brand-brown transition-colors shadow-lg"
             >
               Place Order & Pay {formatGHS(totalAmount)}
             </button>

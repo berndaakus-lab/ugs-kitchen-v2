@@ -136,9 +136,7 @@ function LoginScreen({ onLogin }) {
   return (
     <div className="min-h-screen bg-brand-cream flex items-center justify-center px-6">
       <div className="bg-white rounded-3xl p-8 w-full max-w-xs shadow-xl text-center">
-        <div className="w-14 h-14 bg-brand-orange rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <span className="text-white font-extrabold text-2xl">U</span>
-        </div>
+        <img src="/logo-ugs.jpeg" alt="UGs Kitchen" className="w-14 h-14 object-contain mx-auto mb-4" />
         <h1 className="text-xl font-extrabold text-brand-dark mb-1">Kitchen Staff Login</h1>
         <p className="text-xs text-gray-400 mb-6">UGs Kitchen · Staff &amp; Admin</p>
 
@@ -166,7 +164,7 @@ function LoginScreen({ onLogin }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-orange-700 disabled:opacity-60 transition-colors"
+            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-brand-brown disabled:opacity-60 transition-colors"
           >
             {loading ? 'Checking…' : 'Enter'}
           </button>
@@ -426,7 +424,7 @@ function MenuItemModal({ item, categories, branches, onSave, onClose, saving }) 
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm border-2 transition-colors
                 ${form.is_popular ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-gray-200 bg-white text-gray-500'}`}
             >
-              <Star size={14} fill={form.is_popular ? '#E85D04' : 'none'} stroke={form.is_popular ? '#E85D04' : 'currentColor'} />
+              <Star size={14} fill={form.is_popular ? '#F38F1D' : 'none'} stroke={form.is_popular ? '#F38F1D' : 'currentColor'} />
               Popular
             </button>
           </div>
@@ -434,7 +432,7 @@ function MenuItemModal({ item, categories, branches, onSave, onClose, saving }) 
           <button
             type="submit"
             disabled={saving}
-            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-orange-700 disabled:opacity-60 transition-colors"
+            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-brand-brown disabled:opacity-60 transition-colors"
           >
             {saving ? 'Saving…' : isNew ? 'Add Item' : 'Save Changes'}
           </button>
@@ -551,7 +549,7 @@ function StaffFormModal({ item, branches, onSave, onClose, saving }) {
           <button
             type="submit"
             disabled={saving}
-            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-orange-700 disabled:opacity-60 transition-colors"
+            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-brand-brown disabled:opacity-60 transition-colors"
           >
             {saving ? 'Saving…' : isNew ? 'Create Account' : 'Save Changes'}
           </button>
@@ -976,8 +974,8 @@ export default function AdminPage() {
                       <div className="flex items-center gap-1 mt-0.5">
                         {[1,2,3,4,5].map(s => (
                           <Star key={s} size={12}
-                            fill={review.rating >= s ? '#E85D04' : 'none'}
-                            stroke={review.rating >= s ? '#E85D04' : '#D1D5DB'}
+                            fill={review.rating >= s ? '#F38F1D' : 'none'}
+                            stroke={review.rating >= s ? '#F38F1D' : '#D1D5DB'}
                             strokeWidth={1.5}
                           />
                         ))}
@@ -1242,7 +1240,7 @@ export default function AdminPage() {
                 )}
                 <button
                   onClick={() => setMenuForm({ name: '', description: '', price: '', image: '', is_available: true, is_popular: false, sort_order: 0, category_id: '', branch_id: menuBranch !== 'all' ? menuBranch : (branches[0]?.id ?? '') })}
-                  className="flex-shrink-0 flex items-center gap-1.5 bg-brand-orange text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-orange-700"
+                  className="flex-shrink-0 flex items-center gap-1.5 bg-brand-orange text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-brand-brown"
                 >
                   <Plus size={15} /> Add Item
                 </button>
@@ -1367,7 +1365,7 @@ export default function AdminPage() {
                 </div>
                 <button
                   onClick={() => setStaffForm({ name: '', username: '', pin: '', role: 'staff', is_active: true, branch_id: '' })}
-                  className="flex items-center gap-1.5 bg-brand-orange text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-orange-700"
+                  className="flex items-center gap-1.5 bg-brand-orange text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-brand-brown"
                 >
                   <Plus size={15} /> Add Staff
                 </button>

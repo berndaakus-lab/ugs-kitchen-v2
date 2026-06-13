@@ -130,7 +130,7 @@ export default function AuthModal({ onClose }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-orange-700 transition-colors disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-2 bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-brown transition-colors disabled:opacity-60"
           >
             {tab === 'signin'
               ? <><LogIn size={18} /> {loading ? 'Signing in…' : 'Sign In'}</>

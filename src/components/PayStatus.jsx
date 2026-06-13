@@ -95,7 +95,7 @@ export default function PayStatus({ order, onDismiss }) {
                 <circle
                   cx="44" cy="44" r="38"
                   fill="none"
-                  stroke="#E85D04"
+                  stroke="#F38F1D"
                   strokeWidth="6"
                   strokeLinecap="round"
                   strokeDasharray={`${dash} ${circumference}`}
@@ -166,7 +166,7 @@ export default function PayStatus({ order, onDismiss }) {
 
         <button
           onClick={onDismiss}
-          className="w-full bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-orange-700 transition-colors"
+          className="w-full bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-brown transition-colors"
         >
           Order More Food
         </button>

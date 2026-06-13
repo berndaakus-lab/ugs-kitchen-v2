@@ -19,9 +19,7 @@ export default function BranchSelector() {
 
         {/* Header */}
         <div className="px-6 pt-8 pb-4 text-center">
-          <div className="w-14 h-14 bg-brand-orange rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-white font-extrabold text-2xl leading-none">U</span>
-          </div>
+          <img src="/logo-ugs.jpeg" alt="UGs Kitchen" className="w-14 h-14 object-contain mx-auto mb-4" />
           <h1 className="text-2xl font-extrabold text-brand-dark leading-tight">
             Welcome to UGs Kitchen!
           </h1>

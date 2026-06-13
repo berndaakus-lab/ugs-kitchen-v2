@@ -87,7 +87,7 @@ export default function Home() {
         <title>{currentBranch ? `${currentBranch.name} · UGs Kitchen` : 'UGs Kitchen'}</title>
         <meta name="description" content="Fresh Ghanaian food, delivered fast. Order in 3 taps." />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content="#E85D04" />
+        <meta name="theme-color" content="#F38F1D" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
@@ -97,9 +97,7 @@ export default function Home() {
         <header className="sticky top-0 z-30 bg-brand-cream/95 backdrop-blur border-b border-brand-muted">
           <div className="max-w-lg mx-auto flex items-center justify-between px-4 h-[60px]">
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 bg-brand-orange rounded-xl flex items-center justify-center flex-shrink-0">
-                <span className="text-white font-extrabold text-lg leading-none">U</span>
-              </div>
+              <img src="/logo-ugs.jpeg" alt="UGs Kitchen" className="w-9 h-9 object-contain rounded-xl flex-shrink-0" />
               <div>
                 <p className="font-extrabold text-brand-dark text-base leading-tight">UGs Kitchen</p>
                 {/* Branch switcher */}
@@ -166,7 +164,7 @@ export default function Home() {
 
         {/* Hero banner */}
         <div className="max-w-lg mx-auto px-4 pt-4 pb-2">
-          <div className="bg-gradient-to-r from-brand-orange to-orange-400 rounded-2xl px-5 py-4 text-white">
+          <div className="bg-gradient-to-r from-brand-orange to-brand-brown rounded-2xl px-5 py-4 text-white">
             <p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-0.5">
               {currentBranch?.name ?? 'Order Now'}
             </p>

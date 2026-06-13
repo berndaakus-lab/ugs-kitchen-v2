@@ -19,8 +19,8 @@ function StarInput({ value, onChange }) {
           <Star
             size={32}
             className="transition-colors"
-            fill={(hovered || value) >= star ? '#E85D04' : 'none'}
-            stroke={(hovered || value) >= star ? '#E85D04' : '#D1D5DB'}
+            fill={(hovered || value) >= star ? '#F38F1D' : 'none'}
+            stroke={(hovered || value) >= star ? '#F38F1D' : '#D1D5DB'}
             strokeWidth={1.5}
           />
         </button>
@@ -37,8 +37,8 @@ function StarDisplay({ value }) {
         <Star
           key={star}
           size={14}
-          fill={value >= star ? '#E85D04' : 'none'}
-          stroke={value >= star ? '#E85D04' : '#D1D5DB'}
+          fill={value >= star ? '#F38F1D' : 'none'}
+          stroke={value >= star ? '#F38F1D' : '#D1D5DB'}
           strokeWidth={1.5}
         />
       ))}
@@ -191,7 +191,7 @@ function ReviewForm({ onSubmitted }) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full flex items-center justify-center gap-2 bg-brand-orange text-white font-extrabold rounded-xl py-3 text-sm active:bg-orange-700 transition-colors disabled:opacity-60"
+        className="w-full flex items-center justify-center gap-2 bg-brand-orange text-white font-extrabold rounded-xl py-3 text-sm active:bg-brand-brown transition-colors disabled:opacity-60"
       >
         <Send size={15} />
         {loading ? 'Submitting…' : 'Submit Review'}
@@ -250,7 +250,7 @@ export default function ReviewSection() {
         {!showForm && !submitted && (
           <button
             onClick={() => setShowForm(true)}
-            className="bg-brand-orange text-white text-xs font-bold px-3 py-2 rounded-xl active:bg-orange-700 transition-colors"
+            className="bg-brand-orange text-white text-xs font-bold px-3 py-2 rounded-xl active:bg-brand-brown transition-colors"
           >
             + Write Review
           </button>

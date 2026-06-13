@@ -28,8 +28,8 @@ function StarInput({ value, onChange }) {
           >
             <Star
               size={44}
-              fill={(hovered || value) >= star ? '#E85D04' : 'none'}
-              stroke={(hovered || value) >= star ? '#E85D04' : '#D1D5DB'}
+              fill={(hovered || value) >= star ? '#F38F1D' : 'none'}
+              stroke={(hovered || value) >= star ? '#F38F1D' : '#D1D5DB'}
               strokeWidth={1.5}
             />
           </button>
@@ -99,15 +99,15 @@ export default function ReviewPage() {
             <div className="flex gap-1 justify-center mb-6">
               {[1,2,3,4,5].map(s => (
                 <Star key={s} size={20}
-                  fill={rating >= s ? '#E85D04' : 'none'}
-                  stroke={rating >= s ? '#E85D04' : '#D1D5DB'}
+                  fill={rating >= s ? '#F38F1D' : 'none'}
+                  stroke={rating >= s ? '#F38F1D' : '#D1D5DB'}
                   strokeWidth={1.5}
                 />
               ))}
             </div>
             <Link
               href="/"
-              className="block w-full bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-orange-700 transition-colors text-center"
+              className="block w-full bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-brown transition-colors text-center"
             >
               Order Again 🍽️
             </Link>
@@ -142,8 +142,8 @@ export default function ReviewPage() {
         <div className="max-w-lg mx-auto px-4 py-8">
           {/* Top message */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-brand-orange rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-white font-extrabold text-3xl leading-none">U</span>
+            <div className="flex justify-center mx-auto mb-4">
+              <img src="/logo-ugs.jpeg" alt="UGs Kitchen" className="w-16 h-16 object-contain" />
             </div>
             <h1 className="text-2xl font-extrabold text-brand-dark mb-1">
               How was your meal? 😋
@@ -218,7 +218,7 @@ export default function ReviewPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-orange-700 transition-colors disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-brown transition-colors disabled:opacity-60"
             >
               <Send size={18} />
               {loading ? 'Submitting…' : 'Submit Review'}
