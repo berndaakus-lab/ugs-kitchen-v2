@@ -164,7 +164,7 @@ function LoginScreen({ onLogin }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-brand-brown disabled:opacity-60 transition-colors"
+            className="w-full bg-brand-brown text-white font-extrabold rounded-xl py-3 active:bg-brand-dark disabled:opacity-60 transition-colors"
           >
             {loading ? 'Checking…' : 'Enter'}
           </button>
@@ -261,7 +261,7 @@ function OrderModal({ order, onClose, onStatusChange }) {
                 onClick={() => onStatusChange(order.id, s)}
                 className={`py-2 px-3 rounded-xl text-xs font-bold border-2 transition-colors
                   ${order.status === s
-                    ? 'border-brand-orange bg-brand-orange text-white'
+                    ? 'border-brand-brown bg-brand-brown text-white'
                     : 'border-gray-200 text-gray-600 active:bg-gray-50'
                   }`}
               >
@@ -432,7 +432,7 @@ function MenuItemModal({ item, categories, branches, onSave, onClose, saving }) 
           <button
             type="submit"
             disabled={saving}
-            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-brand-brown disabled:opacity-60 transition-colors"
+            className="w-full bg-brand-brown text-white font-extrabold rounded-xl py-3 active:bg-brand-dark disabled:opacity-60 transition-colors"
           >
             {saving ? 'Saving…' : isNew ? 'Add Item' : 'Save Changes'}
           </button>
@@ -549,7 +549,7 @@ function StaffFormModal({ item, branches, onSave, onClose, saving }) {
           <button
             type="submit"
             disabled={saving}
-            className="w-full bg-brand-orange text-white font-extrabold rounded-xl py-3 active:bg-brand-brown disabled:opacity-60 transition-colors"
+            className="w-full bg-brand-brown text-white font-extrabold rounded-xl py-3 active:bg-brand-dark disabled:opacity-60 transition-colors"
           >
             {saving ? 'Saving…' : isNew ? 'Create Account' : 'Save Changes'}
           </button>
@@ -1027,7 +1027,7 @@ export default function AdminPage() {
             {!isToday && (
               <button
                 onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-                className="px-3 py-2.5 bg-brand-orange text-white text-sm font-bold rounded-xl flex-shrink-0"
+                className="px-3 py-2.5 bg-brand-brown text-white text-sm font-bold rounded-xl flex-shrink-0"
               >
                 Today
               </button>
@@ -1240,7 +1240,7 @@ export default function AdminPage() {
                 )}
                 <button
                   onClick={() => setMenuForm({ name: '', description: '', price: '', image: '', is_available: true, is_popular: false, sort_order: 0, category_id: '', branch_id: menuBranch !== 'all' ? menuBranch : (branches[0]?.id ?? '') })}
-                  className="flex-shrink-0 flex items-center gap-1.5 bg-brand-orange text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-brand-brown"
+                  className="flex-shrink-0 flex items-center gap-1.5 bg-brand-brown text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-brand-dark"
                 >
                   <Plus size={15} /> Add Item
                 </button>
@@ -1365,7 +1365,7 @@ export default function AdminPage() {
                 </div>
                 <button
                   onClick={() => setStaffForm({ name: '', username: '', pin: '', role: 'staff', is_active: true, branch_id: '' })}
-                  className="flex items-center gap-1.5 bg-brand-orange text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-brand-brown"
+                  className="flex items-center gap-1.5 bg-brand-brown text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-brand-dark"
                 >
                   <Plus size={15} /> Add Staff
                 </button>

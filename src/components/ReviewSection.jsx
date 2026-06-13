@@ -191,7 +191,7 @@ function ReviewForm({ onSubmitted }) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full flex items-center justify-center gap-2 bg-brand-orange text-white font-extrabold rounded-xl py-3 text-sm active:bg-brand-brown transition-colors disabled:opacity-60"
+        className="w-full flex items-center justify-center gap-2 bg-brand-brown text-white font-extrabold rounded-xl py-3 text-sm active:bg-brand-dark transition-colors disabled:opacity-60"
       >
         <Send size={15} />
         {loading ? 'Submitting…' : 'Submit Review'}
@@ -250,7 +250,7 @@ export default function ReviewSection() {
         {!showForm && !submitted && (
           <button
             onClick={() => setShowForm(true)}
-            className="bg-brand-orange text-white text-xs font-bold px-3 py-2 rounded-xl active:bg-brand-brown transition-colors"
+            className="bg-brand-brown text-white text-xs font-bold px-3 py-2 rounded-xl active:bg-brand-dark transition-colors"
           >
             + Write Review
           </button>

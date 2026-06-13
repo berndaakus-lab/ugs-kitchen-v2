@@ -240,7 +240,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
                   <span className="w-5 text-center font-extrabold text-sm">{item.quantity}</span>
                   <button
                     onClick={() => addItem(item)}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-brand-orange text-white shadow-sm"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-brand-brown text-white shadow-sm"
                   >
                     <Plus size={12} strokeWidth={3} />
                   </button>
@@ -360,7 +360,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
           ) : (
             <button
               onClick={handlePlaceOrder}
-              className="w-full bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-lg active:bg-brand-brown transition-colors shadow-lg"
+              className="w-full bg-brand-brown text-white font-extrabold rounded-2xl py-4 text-lg active:bg-brand-dark transition-colors shadow-lg"
             >
               Place Order & Pay {formatGHS(totalAmount)}
             </button>

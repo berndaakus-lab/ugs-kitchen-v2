@@ -166,7 +166,7 @@ export default function PayStatus({ order, onDismiss }) {
 
         <button
           onClick={onDismiss}
-          className="w-full bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-brown transition-colors"
+          className="w-full bg-brand-brown text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-dark transition-colors"
         >
           Order More Food
         </button>

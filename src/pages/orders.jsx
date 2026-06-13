@@ -120,7 +120,7 @@ export default function OrdersPage() {
               <p className="text-sm text-gray-400 mt-1">Your order history will appear here.</p>
               <Link
                 href="/"
-                className="inline-block mt-6 bg-brand-orange text-white font-extrabold rounded-2xl px-6 py-3 text-base"
+                className="inline-block mt-6 bg-brand-brown text-white font-extrabold rounded-2xl px-6 py-3 text-base"
               >
                 Order Now
               </Link>

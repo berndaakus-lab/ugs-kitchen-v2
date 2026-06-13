@@ -107,7 +107,7 @@ export default function ReviewPage() {
             </div>
             <Link
               href="/"
-              className="block w-full bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-brown transition-colors text-center"
+              className="block w-full bg-brand-brown text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-dark transition-colors text-center"
             >
               Order Again 🍽️
             </Link>
@@ -218,7 +218,7 @@ export default function ReviewPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-brand-orange text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-brown transition-colors disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 bg-brand-brown text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-dark transition-colors disabled:opacity-60"
             >
               <Send size={18} />
               {loading ? 'Submitting…' : 'Submit Review'}

@@ -74,7 +74,7 @@ function MenuCard({ item }) {
         ) : qty === 0 ? (
           <button
             onClick={() => addItem(item)}
-            className="w-full flex items-center justify-center gap-1 bg-brand-orange text-white font-bold rounded-xl py-2.5 text-sm active:bg-brand-brown transition-colors"
+            className="w-full flex items-center justify-center gap-1 bg-brand-brown text-white font-bold rounded-xl py-2.5 text-sm active:bg-brand-dark transition-colors"
           >
             <Plus size={16} strokeWidth={3} />
             Add
@@ -92,7 +92,7 @@ function MenuCard({ item }) {
             </span>
             <button
               onClick={() => addItem(item)}
-              className="w-8 h-8 flex items-center justify-center rounded-lg bg-brand-orange text-white shadow-sm active:bg-brand-brown"
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-brand-brown text-white shadow-sm active:bg-brand-dark"
             >
               <Plus size={14} strokeWidth={3} />
             </button>
