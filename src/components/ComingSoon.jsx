@@ -212,13 +212,13 @@ export default function ComingSoon() {
             className="text-sm fade-up fade-up-5"
             style={{ color: 'rgba(255,200,130,0.6)' }}
           >
-            Questions? Reach us at{' '}
+            Questions? Reach us on 059 240 0967 or at{' '}
             <a
-              href="mailto:hello@ugskitchen.com"
+              href="mailto:info@ugskitchen.com"
               className="underline underline-offset-2 hover:text-orange-300 transition-colors"
               style={{ color: 'rgba(255,200,130,0.9)' }}
             >
-              hello@ugskitchen.com
+              info@ugskitchen.com
             </a>
           </p>
         </div>
