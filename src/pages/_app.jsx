@@ -1,8 +1,12 @@
 import '../styles/globals.css'
 import { useEffect } from 'react'
+import { useRouter } from 'next/router'
 import { CartProvider }   from '../context/CartContext'
 import { BranchProvider } from '../context/BranchContext'
 import { AuthProvider }   from '../context/AuthContext'
+import ComingSoon from '../components/ComingSoon'
+
+const COMING_SOON = process.env.NEXT_PUBLIC_COMING_SOON === 'true'
 
 const REMINDER_KEY = 'ugs_reminder'
 
@@ -53,6 +57,13 @@ function useReminderBackup() {
 
 export default function App({ Component, pageProps }) {
   useReminderBackup()
+  const router = useRouter()
+
+  // Show coming soon for all public pages; admin always bypasses the flag
+  const isAdminRoute = router.pathname.startsWith('/admin')
+  if (COMING_SOON && !isAdminRoute) {
+    return <ComingSoon />
+  }
 
   return (
     <AuthProvider>
