@@ -848,7 +848,17 @@ export default function AdminPage() {
   }
 
   async function handleStatusChange(orderId, newStatus) {
-    await supabase.from('orders').update({ status: newStatus }).eq('id', orderId)
+    const res = await fetch('/api/admin/update-order', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ orderId, status: newStatus }),
+    })
+
+    if (!res.ok) {
+      const { message } = await res.json().catch(() => ({}))
+      console.error('[admin] status update failed:', message)
+      return
+    }
 
     // SMS the customer on key status changes
     const updatedOrder = { ...selectedOrder, status: newStatus }
