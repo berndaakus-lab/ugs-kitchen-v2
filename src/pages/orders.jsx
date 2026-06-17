@@ -126,22 +126,16 @@ export default function OrdersPage() {
     setLoading(false)
   }
 
-  // Realtime: subscribe to updates on the customer's active orders
+  // Realtime: listen to ALL order updates, patch matching ones into local state
   useEffect(() => {
-    if (!isLoggedIn || !customer) return
+    if (!isLoggedIn || !customer || orders.length === 0) return
 
     const channel = supabase
-      .channel(`customer-orders-${customer.phone}`)
+      .channel(`customer-orders-${customer.id}`)
       .on(
         'postgres_changes',
-        {
-          event:  'UPDATE',
-          schema: 'public',
-          table:  'orders',
-          filter: `momo_number=eq.${customer.phone}`,
-        },
+        { event: 'UPDATE', schema: 'public', table: 'orders' },
         payload => {
-          // Patch the updated order into local state — no full reload needed
           setOrders(prev =>
             prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o)
           )
@@ -150,7 +144,8 @@ export default function OrdersPage() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [isLoggedIn, customer])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, customer, orders.length])
 
   function handleReorder(order) {
     const items = order.items ?? []
