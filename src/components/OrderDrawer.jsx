@@ -71,18 +71,22 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       // Falls back to MoMo number if guest
       const contactPhone = customer?.phone ?? phone
 
+      // Use the longest prep time across all cart items as the order wait time
+      const waitMins = Math.max(...items.map(i => i.wait_time_minutes ?? 30))
+
       const { data: order, error: dbErr } = await supabase
         .from('orders')
         .insert({
-          customer_name:     name.trim(),
-          delivery_location: location,
-          momo_number:       phone,
-          contact_phone:     contactPhone,
-          items:             items,
-          total_amount:      totalAmount,
-          status:            'pending',
-          branch_id:         currentBranch?.id ?? null,
-          notes:             notes.trim() || null,
+          customer_name:      name.trim(),
+          delivery_location:  location,
+          momo_number:        phone,
+          contact_phone:      contactPhone,
+          items:              items,
+          total_amount:       totalAmount,
+          status:             'pending',
+          branch_id:          currentBranch?.id ?? null,
+          notes:              notes.trim() || null,
+          wait_time_minutes:  waitMins,
         })
         .select()
         .single()
@@ -115,19 +119,19 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   function pollOrderStatus(orderId, reference) {
     let resolved = false
 
-    function handleSuccess(orderData) {
+    async function handleSuccess(orderData) {
       if (resolved) return
       resolved = true
       channel.unsubscribe()
       clearInterval(pollInterval)
       clearTimeout(timeoutId)
       setLoading(false)
-      // Silently create/link customer account using already-collected name + MoMo number
-      silentSignIn(orderData.customer_name, orderData.momo_number)
+      // Silently create/link customer account; capture new-account credentials
+      const accountInfo = await silentSignIn(orderData.customer_name, orderData.momo_number)
       clearCart()
       closeDrawer()
-      onPaymentSuccess(orderData)
-      // Owner + customer SMS are sent server-side via webhook.js / verify-payment.js
+      // Attach account info so PayStatus can show credentials for new accounts
+      onPaymentSuccess({ ...orderData, _newAccount: accountInfo })
     }
 
     function handleFailed() {

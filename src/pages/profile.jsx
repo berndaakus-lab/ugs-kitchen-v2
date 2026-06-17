@@ -1,7 +1,7 @@
 import Head from 'next/head'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
-import { ArrowLeft, Camera, Check, Loader2, Phone, User, ShoppingBag, LogOut } from 'lucide-react'
+import { ArrowLeft, Camera, Check, Loader2, Phone, User, ShoppingBag, LogOut, KeyRound, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -34,7 +34,7 @@ function Avatar({ src, name, size = 80 }) {
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { customer, isLoggedIn, loading: authLoading, updateProfile, signOut } = useAuth()
+  const { customer, isLoggedIn, loading: authLoading, updateProfile, updatePassword, signOut } = useAuth()
 
   const [name,        setName]        = useState('')
   const [avatarUrl,   setAvatarUrl]   = useState(null)
@@ -43,6 +43,12 @@ export default function ProfilePage() {
   const [saved,       setSaved]       = useState(false)
   const [error,       setError]       = useState('')
   const [orderCount,  setOrderCount]  = useState(null)
+
+  const [newPassword,  setNewPassword]  = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [pwSaving,     setPwSaving]     = useState(false)
+  const [pwSaved,      setPwSaved]      = useState(false)
+  const [pwError,      setPwError]      = useState('')
 
   const fileRef = useRef(null)
 
@@ -106,6 +112,16 @@ export default function ProfilePage() {
     else { setSaved(true); setTimeout(() => setSaved(false), 2000) }
 
     setSaving(false)
+  }
+
+  async function handlePasswordSave(e) {
+    e.preventDefault()
+    if (newPassword.length < 4) { setPwError('Password must be at least 4 characters.'); return }
+    setPwSaving(true); setPwError('')
+    const { error: err } = await updatePassword(newPassword)
+    if (err) setPwError(err)
+    else { setPwSaved(true); setNewPassword(''); setTimeout(() => setPwSaved(false), 2000) }
+    setPwSaving(false)
   }
 
   function handleSignOut() {
@@ -235,6 +251,45 @@ export default function ProfilePage() {
               ) : (
                 'Save Changes'
               )}
+            </button>
+          </form>
+
+          {/* Change password */}
+          <form onSubmit={handlePasswordSave} className="bg-white rounded-2xl border border-brand-muted p-5 space-y-4">
+            <h2 className="font-extrabold text-brand-dark text-base">Change Password</h2>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
+                New Password
+              </label>
+              <div className="relative">
+                <KeyRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  className="w-full pl-9 pr-10 py-3 border-2 border-gray-200 rounded-xl text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Min. 4 characters</p>
+            </div>
+            {pwError && <p className="text-sm text-red-500 font-semibold">{pwError}</p>}
+            <button
+              type="submit"
+              disabled={pwSaving}
+              className="w-full flex items-center justify-center gap-2 bg-brand-brown text-white font-extrabold rounded-2xl py-3 text-sm disabled:opacity-60"
+            >
+              {pwSaving ? <Loader2 size={16} className="animate-spin" />
+                : pwSaved ? <><Check size={16} /> Password Updated!</>
+                : <><KeyRound size={16} /> Update Password</>
+              }
             </button>
           </form>
 

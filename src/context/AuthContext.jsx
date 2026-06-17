@@ -5,8 +5,17 @@ const AuthContext = createContext(null)
 const SESSION_KEY = 'ugs_customer'
 
 function validatePhone(phone) {
-  // Ghana: starts with 0, second digit 2-5, total 10 digits
   return /^0[2-5][0-9]{8}$/.test(phone.replace(/\s/g, ''))
+}
+
+function generateUsername(name, phone) {
+  const first = name.trim().split(' ')[0].toLowerCase().replace(/[^a-z]/g, '')
+  return `${first}${phone.slice(-3)}`
+}
+
+function generatePassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  return 'UGS-' + Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 }
 
 export function AuthProvider({ children }) {
@@ -22,28 +31,44 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
-  // ── Silent upsert — called automatically on order placement ──
-  // Creates account if new number, returns existing if known
+  // ── Silent sign-in — called automatically on order payment ──
+  // Returns { session, isNew, username, tempPassword } for new customers
+  // Returns { session, isNew: false } for returning customers
   const silentSignIn = useCallback(async (name, phone) => {
     const cleanPhone = phone.replace(/\s/g, '')
     if (!validatePhone(cleanPhone)) return null
 
     try {
+      // Check if customer already exists
+      const { data: existing } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('phone', cleanPhone)
+        .maybeSingle()
+
+      if (existing) {
+        const session = { id: existing.id, name: existing.name, phone: existing.phone, avatar_url: existing.avatar_url ?? null }
+        setCustomer(session)
+        localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+        return { session, isNew: false }
+      }
+
+      // New customer — generate credentials
+      const username    = generateUsername(name, cleanPhone)
+      const tempPassword = generatePassword()
+
       const { data, error } = await supabase
         .from('customers')
-        .upsert(
-          { name: name.trim(), phone: cleanPhone },
-          { onConflict: 'phone', ignoreDuplicates: false }
-        )
+        .insert({ name: name.trim(), phone: cleanPhone, username, password: tempPassword })
         .select()
         .single()
 
       if (error) throw error
 
-      const session = { id: data.id, name: data.name, phone: data.phone }
+      const session = { id: data.id, name: data.name, phone: data.phone, avatar_url: null }
       setCustomer(session)
       localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-      return session
+      return { session, isNew: true, username, tempPassword }
     } catch {
       return null
     }
@@ -62,7 +87,27 @@ export function AuthProvider({ children }) {
 
     if (!data) return { error: 'No account found for this number.' }
 
-    const session = { id: data.id, name: data.name, phone: data.phone }
+    const session = { id: data.id, name: data.name, phone: data.phone, avatar_url: data.avatar_url ?? null }
+    setCustomer(session)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+    return { data: session }
+  }, [])
+
+  // ── Sign in by username + password ────────────────────────────
+  const signInByCredentials = useCallback(async (username, password) => {
+    if (!username.trim()) return { error: 'Enter your username.' }
+    if (!password)        return { error: 'Enter your password.' }
+
+    const { data } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('username', username.trim().toLowerCase())
+      .maybeSingle()
+
+    if (!data)                  return { error: 'Username not found.' }
+    if (data.password !== password) return { error: 'Incorrect password.' }
+
+    const session = { id: data.id, name: data.name, phone: data.phone, avatar_url: data.avatar_url ?? null }
     setCustomer(session)
     localStorage.setItem(SESSION_KEY, JSON.stringify(session))
     return { data: session }
@@ -97,6 +142,20 @@ export function AuthProvider({ children }) {
     return { data: session }
   }, [])
 
+  // ── Update password ───────────────────────────────────────────
+  const updatePassword = useCallback(async (newPassword) => {
+    if (!customer)          return { error: 'Not logged in.' }
+    if (!newPassword?.trim()) return { error: 'Password cannot be empty.' }
+
+    const { error } = await supabase
+      .from('customers')
+      .update({ password: newPassword.trim() })
+      .eq('id', customer.id)
+
+    if (error) return { error: 'Could not update password.' }
+    return { data: true }
+  }, [customer])
+
   const updateProfile = useCallback(async ({ name, avatar_url }) => {
     if (!customer) return { error: 'Not logged in.' }
     const updates = {}
@@ -130,9 +189,11 @@ export function AuthProvider({ children }) {
       isLoggedIn: !!customer,
       silentSignIn,
       signInByPhone,
+      signInByCredentials,
       signUp,
       signOut,
       updateProfile,
+      updatePassword,
       validatePhone,
     }}>
       {children}

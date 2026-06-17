@@ -21,6 +21,8 @@
 --   create policy "Anyone can update customers" on customers for update using (true) with check (true);
 --   create policy "Anyone can read customers"   on customers for select using (true);
 --   alter table customers add column if not exists avatar_url text;
+--   alter table customers add column if not exists username   text unique;
+--   alter table customers add column if not exists password   text;
 --
 -- ============================================================
 
@@ -104,12 +106,16 @@ create table if not exists customers (
   id         uuid primary key default uuid_generate_v4(),
   name       text not null,
   phone      text not null unique,  -- Ghana format: 0244XXXXXX
+  username   text unique,           -- auto-generated on first order (e.g. kwame456)
+  password   text,                  -- plain-text temp password shown once on confirmation
   avatar_url text,                  -- public URL from customer-avatars storage bucket
   created_at timestamptz default now()
 );
 
--- If running against an existing DB, add the column safely:
+-- If running against an existing DB, add columns safely:
 alter table customers add column if not exists avatar_url text;
+alter table customers add column if not exists username   text unique;
+alter table customers add column if not exists password   text;
 
 alter table customers enable row level security;
 -- Anyone (anon key) can upsert their own record by phone
@@ -175,18 +181,21 @@ create table if not exists categories (
 
 -- ─── MENU ITEMS ─────────────────────────────────────────────
 create table if not exists menu_items (
-  id           uuid primary key default uuid_generate_v4(),
-  branch_id    uuid references branches(id) on delete cascade,
-  category_id  uuid references categories(id) on delete set null,
-  name         text    not null,
-  description  text,
-  price        numeric(10, 2) not null,
-  image        text,
-  is_available boolean not null default true,
-  is_popular   boolean not null default false,
-  sort_order   int     not null default 0,
-  created_at   timestamptz default now()
+  id                uuid primary key default uuid_generate_v4(),
+  branch_id         uuid references branches(id) on delete cascade,
+  category_id       uuid references categories(id) on delete set null,
+  name              text    not null,
+  description       text,
+  price             numeric(10, 2) not null,
+  image             text,
+  is_available      boolean not null default true,
+  is_popular        boolean not null default false,
+  sort_order        int     not null default 0,
+  wait_time_minutes int     not null default 30, -- estimated prep time in minutes
+  created_at        timestamptz default now()
 );
+
+alter table menu_items add column if not exists wait_time_minutes int not null default 30;
 
 -- ─── ORDERS ─────────────────────────────────────────────────
 create table if not exists orders (
@@ -206,8 +215,11 @@ create table if not exists orders (
   contact_phone        text,                          -- account phone if logged in, else momo_number
   notes                text,
   reminded_at          timestamptz,   -- set when 30-min reminder SMS is sent (prevents duplicates)
+  wait_time_minutes    int,           -- estimated prep time stored at order time
   created_at           timestamptz default now()
 );
+
+alter table orders add column if not exists wait_time_minutes int;
 
 -- ─── ROW LEVEL SECURITY ─────────────────────────────────────
 
