@@ -20,6 +20,7 @@
 --   create policy "Anyone can upsert customers" on customers for insert with check (true);
 --   create policy "Anyone can update customers" on customers for update using (true) with check (true);
 --   create policy "Anyone can read customers"   on customers for select using (true);
+--   alter table customers add column if not exists avatar_url text;
 --
 -- ============================================================
 
@@ -33,10 +34,13 @@ drop table if exists customers  cascade;
 drop table if exists staff      cascade;
 
 -- Drop storage policies if bucket already exists
-drop policy if exists "Public can view menu images"  on storage.objects;
-drop policy if exists "Owner can upload menu images" on storage.objects;
-drop policy if exists "Owner can update menu images" on storage.objects;
-drop policy if exists "Owner can delete menu images" on storage.objects;
+drop policy if exists "Public can view menu images"      on storage.objects;
+drop policy if exists "Owner can upload menu images"     on storage.objects;
+drop policy if exists "Owner can update menu images"     on storage.objects;
+drop policy if exists "Owner can delete menu images"     on storage.objects;
+drop policy if exists "Public can view avatars"          on storage.objects;
+drop policy if exists "Anyone can upload their avatar"   on storage.objects;
+drop policy if exists "Anyone can update their avatar"   on storage.objects;
 
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
@@ -100,8 +104,12 @@ create table if not exists customers (
   id         uuid primary key default uuid_generate_v4(),
   name       text not null,
   phone      text not null unique,  -- Ghana format: 0244XXXXXX
+  avatar_url text,                  -- public URL from customer-avatars storage bucket
   created_at timestamptz default now()
 );
+
+-- If running against an existing DB, add the column safely:
+alter table customers add column if not exists avatar_url text;
 
 alter table customers enable row level security;
 -- Anyone (anon key) can upsert their own record by phone
@@ -138,6 +146,23 @@ create policy "Owner can update menu images"
 create policy "Owner can delete menu images"
   on storage.objects for delete
   using ( bucket_id = 'menu-images' and auth.role() = 'authenticated' );
+
+-- ─── STORAGE BUCKET FOR CUSTOMER AVATARS ────────────────────
+insert into storage.buckets (id, name, public)
+values ('customer-avatars', 'customer-avatars', true)
+on conflict (id) do nothing;
+
+create policy "Public can view avatars"
+  on storage.objects for select
+  using ( bucket_id = 'customer-avatars' );
+
+create policy "Anyone can upload their avatar"
+  on storage.objects for insert
+  with check ( bucket_id = 'customer-avatars' );
+
+create policy "Anyone can update their avatar"
+  on storage.objects for update
+  using ( bucket_id = 'customer-avatars' );
 
 -- ─── CATEGORIES ─────────────────────────────────────────────
 create table if not exists categories (
