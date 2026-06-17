@@ -384,7 +384,7 @@ function MenuItemModal({ item, categories, branches, onSave, onClose, saving }) 
             </div>
           </div>
 
-          {/* Sort order + Image URL row */}
+          {/* Sort order + Prep time row */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Sort Order</label>
@@ -397,14 +397,27 @@ function MenuItemModal({ item, categories, branches, onSave, onClose, saving }) 
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Image URL</label>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Prep Time (mins)</label>
               <input
-                value={form.image ?? ''}
-                onChange={e => set('image', e.target.value)}
-                placeholder="https://…"
+                type="number"
+                min="1"
+                max="120"
+                value={form.wait_time_minutes ?? 30}
+                onChange={e => set('wait_time_minutes', e.target.value)}
                 className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange"
               />
             </div>
+          </div>
+
+          {/* Image URL */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Image URL</label>
+            <input
+              value={form.image ?? ''}
+              onChange={e => set('image', e.target.value)}
+              placeholder="https://…"
+              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange"
+            />
           </div>
 
           {/* Toggles */}
@@ -747,15 +760,16 @@ export default function AdminPage() {
   async function handleMenuSave(formData) {
     setFormSaving(true)
     const payload = {
-      name:         formData.name.trim(),
-      description:  formData.description?.trim() || null,
-      price:        parseFloat(formData.price),
-      image:        formData.image?.trim() || null,
-      is_available: formData.is_available,
-      is_popular:   formData.is_popular,
-      sort_order:   parseInt(formData.sort_order) || 0,
-      category_id:  formData.category_id || null,
-      branch_id:    formData.branch_id,
+      name:              formData.name.trim(),
+      description:       formData.description?.trim() || null,
+      price:             parseFloat(formData.price),
+      image:             formData.image?.trim() || null,
+      is_available:      formData.is_available,
+      is_popular:        formData.is_popular,
+      sort_order:        parseInt(formData.sort_order) || 0,
+      category_id:       formData.category_id || null,
+      branch_id:         formData.branch_id,
+      wait_time_minutes: parseInt(formData.wait_time_minutes) || 30,
     }
     if (formData.id) {
       await supabase.from('menu_items').update(payload).eq('id', formData.id)
@@ -1239,7 +1253,7 @@ export default function AdminPage() {
                   </div>
                 )}
                 <button
-                  onClick={() => setMenuForm({ name: '', description: '', price: '', image: '', is_available: true, is_popular: false, sort_order: 0, category_id: '', branch_id: menuBranch !== 'all' ? menuBranch : (branches[0]?.id ?? '') })}
+                  onClick={() => setMenuForm({ name: '', description: '', price: '', image: '', is_available: true, is_popular: false, sort_order: 0, category_id: '', branch_id: menuBranch !== 'all' ? menuBranch : (branches[0]?.id ?? ''), wait_time_minutes: 30 })}
                   className="flex-shrink-0 flex items-center gap-1.5 bg-brand-brown text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-brand-dark"
                 >
                   <Plus size={15} /> Add Item

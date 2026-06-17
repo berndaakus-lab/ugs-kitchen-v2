@@ -1,11 +1,75 @@
 import Head from 'next/head'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
-import { ArrowLeft, ShoppingBag, RotateCcw, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { ArrowLeft, ShoppingBag, RotateCcw, Clock, CheckCircle2, XCircle, Loader2, UtensilsCrossed } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
+
+function PreparingCountdown({ order }) {
+  const startMs  = new Date(order.paid_at ?? order.created_at).getTime()
+  const totalSecs = (order.wait_time_minutes ?? 30) * 60
+  const endMs    = startMs + totalSecs * 1000
+
+  const [remaining, setRemaining] = useState(() => Math.max(0, Math.floor((endMs - Date.now()) / 1000)))
+
+  useEffect(() => {
+    if (remaining <= 0) {
+      // Fire auto-ready when countdown reaches zero on the orders page
+      fetch('/api/auto-ready', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ orderId: order.id }),
+      }).catch(() => {})
+      return
+    }
+    const id = setInterval(() => {
+      const left = Math.max(0, Math.floor((endMs - Date.now()) / 1000))
+      setRemaining(left)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [endMs, remaining, order.id])
+
+  const pct  = Math.min(100, Math.round(((totalSecs - remaining) / totalSecs) * 100))
+  const circ = 2 * Math.PI * 20
+  const dash = (pct / 100) * circ
+
+  const mm = Math.floor(remaining / 60).toString().padStart(2, '0')
+  const ss = (remaining % 60).toString().padStart(2, '0')
+
+  if (remaining <= 0) {
+    return (
+      <div className="flex items-center gap-2 px-4 pb-3">
+        <UtensilsCrossed size={14} className="text-brand-orange" />
+        <p className="text-xs font-bold text-brand-orange">Should be ready very soon!</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-3 px-4 pb-3">
+      <div className="relative w-12 h-12 flex-shrink-0">
+        <svg className="w-12 h-12 -rotate-90" viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="20" fill="none" stroke="#F5EDE0" strokeWidth="4" />
+          <circle
+            cx="24" cy="24" r="20"
+            fill="none" stroke="#F38F1D" strokeWidth="4" strokeLinecap="round"
+            strokeDasharray={`${dash} ${circ}`}
+            style={{ transition: 'stroke-dasharray 1s linear' }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-[10px] font-extrabold text-brand-dark leading-none">{mm}:{ss}</span>
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-extrabold text-brand-dark">Cooking your food</p>
+        <p className="text-[11px] text-gray-400">Est. {order.wait_time_minutes ?? 30} min total</p>
+      </div>
+    </div>
+  )
+}
 
 function formatGHS(amount) {
   return `GH₵ ${Number(amount).toFixed(2)}`
@@ -164,6 +228,13 @@ export default function OrdersPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Preparing countdown */}
+                  {order.status === 'preparing' && (
+                    <div className="border-t border-brand-muted">
+                      <PreparingCountdown order={order} />
+                    </div>
+                  )}
 
                   {/* Notes */}
                   {order.notes && (

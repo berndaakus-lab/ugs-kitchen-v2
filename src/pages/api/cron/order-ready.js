@@ -1,38 +1,54 @@
 // GET /api/cron/order-ready
-// Called by Vercel Cron every 5 minutes (see vercel.json).
-// Finds paid/preparing orders that are 30+ minutes old and haven't had a reminder sent,
-// then sends a single "your food should be ready soon" SMS to the customer.
+// Called by Vercel Cron every minute (see vercel.json).
 //
-// Cost-saving design:
-//   - Only 1 reminder SMS per order (reminded_at column guards against re-sends)
-//   - Only fires if order is still in-progress (not ready/delivered/cancelled)
-//   - Batches all qualifying orders in one DB query
+// Finds paid/preparing orders where the admin-set prep time has elapsed,
+// sends a smart SMS (pickup vs delivery) and marks the order as ready.
+// reminded_at guards against double-sends even if cron overlaps.
 
 import { createClient } from '@supabase/supabase-js'
-import { sendSMS, msgReadyReminder } from '../../../lib/sms'
+import { sendSMS, smsPhone } from '../../../lib/sms'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
+function isPickup(location) {
+  return /pick.?up/i.test(location ?? '')
+}
+
+function msgAutoReady(order) {
+  const name    = order.customer_name
+  const orderId = `#${String(order.id).slice(-6).toUpperCase()}`
+
+  if (isPickup(order.delivery_location)) {
+    return (
+      `Hi ${name}! 🎉 Your UGs Kitchen order ${orderId} is ready for pickup!\n` +
+      `Please come collect your food. Thank you for choosing UGs Kitchen! 🍽️`
+    )
+  }
+
+  return (
+    `Hi ${name}! 🛵 Your UGs Kitchen order ${orderId} is ready and on its way to ${order.delivery_location}!\n` +
+    `Please be available to receive your delivery. Enjoy your meal! 🍽️`
+  )
+}
+
 export default async function handler(req, res) {
-  // Vercel Cron sends GET; protect against random callers with a shared secret
   const authHeader = req.headers.authorization
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ message: 'Unauthorized' })
   }
 
-  const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
-
-  // Find orders: paid or preparing, older than 30 mins, no reminder sent yet
+  // Fetch all in-progress orders that haven't been reminded yet
+  // We filter by elapsed time in JS since wait_time_minutes varies per order
   const { data: orders, error } = await supabase
     .from('orders')
-    .select('id, customer_name, momo_number, delivery_location, total_amount, items')
+    .select('id, customer_name, momo_number, contact_phone, delivery_location, total_amount, items, paid_at, created_at, wait_time_minutes')
     .in('status', ['paid', 'preparing'])
-    .lt('paid_at', thirtyMinsAgo)
     .is('reminded_at', null)
-    .limit(20) // Safety cap — never blast more than 20 at once
+    .not('paid_at', 'is', null)
+    .limit(50)
 
   if (error) {
     console.error('[cron/order-ready] DB query failed:', error.message)
@@ -40,31 +56,41 @@ export default async function handler(req, res) {
   }
 
   if (!orders || orders.length === 0) {
-    return res.status(200).json({ sent: 0 })
+    return res.status(200).json({ sent: 0, checked: 0 })
   }
 
-  let sent = 0
-  for (const order of orders) {
-    // Mark reminded_at first (optimistic lock) to avoid double-send if cron overlaps
-    const { error: updateErr } = await supabase
-      .from('orders')
-      .update({ reminded_at: new Date().toISOString() })
-      .eq('id', order.id)
-      .is('reminded_at', null) // Only update if not already set (race guard)
+  const now = Date.now()
+  const due = orders.filter(order => {
+    const waitMs  = (order.wait_time_minutes ?? 30) * 60 * 1000
+    const paidAt  = new Date(order.paid_at).getTime()
+    return now >= paidAt + waitMs
+  })
 
-    if (updateErr) {
-      console.warn(`[cron/order-ready] Could not lock order ${order.id}:`, updateErr.message)
+  let sent = 0
+  for (const order of due) {
+    // Optimistic lock — set reminded_at first to prevent double-send on overlap
+    const { error: lockErr } = await supabase
+      .from('orders')
+      .update({
+        reminded_at: new Date().toISOString(),
+        status:      'ready',
+      })
+      .eq('id', order.id)
+      .is('reminded_at', null)
+
+    if (lockErr) {
+      console.warn(`[cron/order-ready] Could not lock order ${order.id}:`, lockErr.message)
       continue
     }
 
-    const result = await sendSMS({
-      to:      order.momo_number,
-      message: msgReadyReminder(order),
-    })
+    const phone = smsPhone(order)
+    if (!phone) continue
 
+    const result = await sendSMS({ to: phone, message: msgAutoReady(order) })
     if (result.ok) sent++
+
+    console.log(`[cron/order-ready] Order ${order.id} → ready, SMS ${result.ok ? 'sent' : 'failed'}`)
   }
 
-  console.log(`[cron/order-ready] Sent ${sent}/${orders.length} reminders`)
-  return res.status(200).json({ sent, total: orders.length })
+  return res.status(200).json({ sent, due: due.length, checked: orders.length })
 }

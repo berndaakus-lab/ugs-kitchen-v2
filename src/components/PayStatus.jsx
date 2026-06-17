@@ -1,25 +1,17 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, UtensilsCrossed, Clock } from 'lucide-react'
-import { msgReadyReminder, smsPhone } from '../lib/sms'
+import { CheckCircle2, UtensilsCrossed, Clock, Copy, Check, LogIn } from 'lucide-react'
+import Link from 'next/link'
 
-const COUNTDOWN_SECS = 30 * 60 // 30 minutes
-const REMINDER_KEY   = 'ugs_reminder' // localStorage key
+const REMINDER_KEY = 'ugs_reminder'
 
-// Fire the reminder SMS via our server-side endpoint
-async function fireReminderSMS(order) {
+async function fireAutoReady(order) {
   try {
-    await fetch('/api/send-sms', {
+    await fetch('/api/auto-ready', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        to:      smsPhone(order),
-        message: msgReadyReminder(order),
-      }),
+      body:    JSON.stringify({ orderId: order.id }),
     })
-  } catch {
-    // Silent — best effort
-  }
-  // Clear the localStorage backup once sent
+  } catch {}
   localStorage.removeItem(REMINDER_KEY)
 }
 
@@ -33,16 +25,34 @@ function formatTime(secs) {
   return `${m}:${s}`
 }
 
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false)
+  function copy() {
+    navigator.clipboard.writeText(text).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <button
+      onClick={copy}
+      className="ml-2 text-brand-orange hover:text-brand-brown transition-colors"
+      title="Copy"
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+    </button>
+  )
+}
+
 export default function PayStatus({ order, onDismiss }) {
-  const [remaining, setRemaining] = useState(COUNTDOWN_SECS)
+  const waitSecs = (order?.wait_time_minutes ?? 30) * 60
+  const [remaining, setRemaining] = useState(waitSecs)
   const [done,      setDone]      = useState(false)
+
+  const newAccount = order?._newAccount?.isNew ? order._newAccount : null
 
   useEffect(() => {
     if (!order) return
-
-    // Save reminder target time + order to localStorage as a backup.
-    // If the customer dismisses this screen early, the backup fires on next app open.
-    const fireAt = Date.now() + COUNTDOWN_SECS * 1000
+    const fireAt = Date.now() + waitSecs * 1000
     localStorage.setItem(REMINDER_KEY, JSON.stringify({ fireAt, order }))
 
     const interval = setInterval(() => {
@@ -50,25 +60,24 @@ export default function PayStatus({ order, onDismiss }) {
         if (prev <= 1) {
           clearInterval(interval)
           setDone(true)
-          // ── Fire reminder SMS from client using device time ──
-          fireReminderSMS(order)
+          fireAutoReady(order)
           return 0
         }
         return prev - 1
       })
     }, 1000)
     return () => clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order])
 
   if (!order) return null
 
-  // Progress 0–100 for the ring
-  const progress = Math.round(((COUNTDOWN_SECS - remaining) / COUNTDOWN_SECS) * 100)
-  const circumference = 2 * Math.PI * 38 // r=38
-  const dash = (progress / 100) * circumference
+  const progress      = Math.round(((waitSecs - remaining) / waitSecs) * 100)
+  const circumference = 2 * Math.PI * 38
+  const dash          = (progress / 100) * circumference
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/95 px-6 animate-fade-in overflow-y-auto py-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/95 px-4 animate-fade-in overflow-y-auto py-6">
       <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
 
         {/* Success header */}
@@ -84,14 +93,12 @@ export default function PayStatus({ order, onDismiss }) {
           </p>
         </div>
 
-        {/* ── Countdown ring ── */}
+        {/* Countdown ring */}
         {!done ? (
           <div className="flex flex-col items-center mb-5">
             <div className="relative w-24 h-24">
               <svg className="w-24 h-24 -rotate-90" viewBox="0 0 88 88">
-                {/* Track */}
                 <circle cx="44" cy="44" r="38" fill="none" stroke="#F5EDE0" strokeWidth="6" />
-                {/* Progress */}
                 <circle
                   cx="44" cy="44" r="38"
                   fill="none"
@@ -111,7 +118,9 @@ export default function PayStatus({ order, onDismiss }) {
             </div>
             <div className="flex items-center gap-2 mt-3">
               <UtensilsCrossed size={15} className="text-brand-orange" />
-              <p className="text-sm font-bold text-brand-dark">Your food is being prepared</p>
+              <p className="text-sm font-bold text-brand-dark">
+                Est. wait: {order.wait_time_minutes ?? 30} min
+              </p>
             </div>
             <p className="text-xs text-gray-400 mt-1 text-center">
               You&apos;ll receive an SMS when your order is ready
@@ -120,12 +129,46 @@ export default function PayStatus({ order, onDismiss }) {
         ) : (
           <div className="flex flex-col items-center mb-5 bg-orange-50 rounded-2xl p-4">
             <Clock size={28} className="text-brand-orange mb-2" />
-            <p className="font-extrabold text-brand-dark text-center">
-              Your order should be ready soon!
-            </p>
+            <p className="font-extrabold text-brand-dark text-center">Your order should be ready soon!</p>
             <p className="text-xs text-gray-500 text-center mt-1">
-              We&apos;ll send you an SMS once it&apos;s confirmed ready for pickup or delivery.
+              We&apos;ll send you an SMS once it&apos;s confirmed ready.
             </p>
+          </div>
+        )}
+
+        {/* New account credentials */}
+        {newAccount && (
+          <div className="mb-5 bg-brand-cream border-2 border-brand-orange/30 rounded-2xl p-4">
+            <p className="text-xs font-extrabold uppercase tracking-wider text-brand-orange mb-2">
+              🎉 Your account was created!
+            </p>
+            <p className="text-xs text-gray-500 mb-3">
+              Sign in anytime to track orders and reorder. Save these credentials:
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between bg-white rounded-xl px-3 py-2">
+                <div>
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Username</p>
+                  <p className="font-extrabold text-brand-dark text-sm">{newAccount.username}</p>
+                </div>
+                <CopyButton text={newAccount.username} />
+              </div>
+              <div className="flex items-center justify-between bg-white rounded-xl px-3 py-2">
+                <div>
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Temp Password</p>
+                  <p className="font-extrabold text-brand-dark text-sm tracking-widest">{newAccount.tempPassword}</p>
+                </div>
+                <CopyButton text={newAccount.tempPassword} />
+              </div>
+            </div>
+            <Link
+              href="/profile"
+              onClick={onDismiss}
+              className="mt-3 flex items-center justify-center gap-2 w-full bg-brand-orange text-white font-extrabold rounded-xl py-2.5 text-sm"
+            >
+              <LogIn size={14} />
+              Go to My Profile
+            </Link>
           </div>
         )}
 
@@ -139,16 +182,12 @@ export default function PayStatus({ order, onDismiss }) {
 
         {/* Items list */}
         <div className="mb-5 space-y-2 bg-white border border-brand-muted rounded-2xl p-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">
-            Your Items
-          </p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">Your Items</p>
           {order.items?.map((item, i) => (
             <div key={i} className="flex justify-between items-start gap-2">
-              <div className="flex-1">
-                <span className="text-sm font-semibold text-brand-dark">
-                  {item.quantity}× {item.name}
-                </span>
-              </div>
+              <span className="text-sm font-semibold text-brand-dark flex-1">
+                {item.quantity}× {item.name}
+              </span>
               <span className="text-sm font-bold text-brand-dark whitespace-nowrap">
                 {formatGHS(item.price * item.quantity)}
               </span>

@@ -1,7 +1,7 @@
 import Head from 'next/head'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
-import { ShoppingBag, MapPin, ChevronDown, User, LogOut, History } from 'lucide-react'
+import { ShoppingBag, MapPin, ChevronDown, User, LogOut, History, UserCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import MenuGrid from '../components/MenuGrid'
@@ -20,9 +20,22 @@ export default function Home() {
   const [categories,  setCategories]  = useState([])
   const [loading,     setLoading]     = useState(true)
   const [paidOrder,   setPaidOrder]   = useState(null)
-  const [showAuth, setShowAuth] = useState(false)
+  const [showAuth,    setShowAuth]    = useState(false)
+  const [showAccMenu, setShowAccMenu] = useState(false)
   const router = useRouter()
   const prevBranchId = useRef(null)
+  const accMenuRef   = useRef(null)
+
+  // Close account menu on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (accMenuRef.current && !accMenuRef.current.contains(e.target)) {
+        setShowAccMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   const { totalItems, openDrawer, clearCart } = useCart()
   const { currentBranch, switchBranch, loading: branchLoading } = useBranch()
@@ -116,28 +129,56 @@ export default function Home() {
 
             <div className="flex items-center gap-1.5">
               {isLoggedIn ? (
-                <>
-                  {/* Greeting */}
-                  <span className="text-xs font-bold text-brand-dark hidden sm:block max-w-[70px] truncate">
-                    Hi, {customer.name.split(' ')[0]}
-                  </span>
-                  {/* My Orders */}
-                  <Link
-                    href="/orders"
-                    className="flex items-center justify-center w-9 h-9 rounded-xl bg-brand-muted text-brand-dark"
-                    title="My Orders"
-                  >
-                    <History size={17} />
-                  </Link>
-                  {/* Sign Out */}
+                <div className="relative" ref={accMenuRef}>
+                  {/* Account trigger */}
                   <button
-                    onClick={signOut}
-                    className="flex items-center justify-center w-9 h-9 rounded-xl bg-brand-muted text-red-500"
-                    title="Sign Out"
+                    onClick={() => setShowAccMenu(v => !v)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-brand-muted"
                   >
-                    <LogOut size={17} />
+                    {customer.avatar_url ? (
+                      <img
+                        src={customer.avatar_url}
+                        alt={customer.name}
+                        className="w-6 h-6 rounded-full object-cover"
+                      />
+                    ) : (
+                      <UserCircle2 size={20} className="text-brand-dark" />
+                    )}
+                    <span className="text-xs font-bold text-brand-dark max-w-[60px] truncate hidden sm:block">
+                      {customer.name.split(' ')[0]}
+                    </span>
+                    <ChevronDown size={13} className="text-gray-400" />
                   </button>
-                </>
+
+                  {/* Dropdown */}
+                  {showAccMenu && (
+                    <div className="absolute right-0 top-[calc(100%+6px)] w-44 bg-white rounded-2xl shadow-lg border border-brand-muted overflow-hidden z-50">
+                      <Link
+                        href="/profile"
+                        onClick={() => setShowAccMenu(false)}
+                        className="flex items-center gap-2.5 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand-muted transition-colors"
+                      >
+                        <User size={15} className="text-brand-orange" />
+                        My Profile
+                      </Link>
+                      <Link
+                        href="/orders"
+                        onClick={() => setShowAccMenu(false)}
+                        className="flex items-center gap-2.5 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand-muted transition-colors border-t border-gray-100"
+                      >
+                        <History size={15} className="text-brand-orange" />
+                        My Orders
+                      </Link>
+                      <button
+                        onClick={() => { signOut(); setShowAccMenu(false) }}
+                        className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-semibold text-red-500 hover:bg-red-50 transition-colors border-t border-gray-100"
+                      >
+                        <LogOut size={15} />
+                        Sign Out
+                      </button>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <button
                   onClick={() => setShowAuth(true)}
