@@ -1,6 +1,6 @@
 import Image from 'next/image'
 import { useState } from 'react'
-import { Plus, Minus, UtensilsCrossed } from 'lucide-react'
+import { Plus, Minus, UtensilsCrossed, Clock } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 
 function formatGHS(amount) {
@@ -60,6 +60,12 @@ function MenuCard({ item }) {
         </h3>
         {item.description && (
           <p className="text-xs text-gray-500 leading-snug">{item.description}</p>
+        )}
+        {item.wait_time_minutes && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 mt-0.5">
+            <Clock size={10} />
+            ~{item.wait_time_minutes} min
+          </span>
         )}
         <p className={`font-extrabold text-base mt-auto pt-1 ${unavailable ? 'text-gray-400' : 'text-brand-orange'}`}>
           {formatGHS(item.price)}
