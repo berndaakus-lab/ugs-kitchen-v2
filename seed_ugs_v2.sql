@@ -20,9 +20,11 @@
 --   create policy "Anyone can upsert customers" on customers for insert with check (true);
 --   create policy "Anyone can update customers" on customers for update using (true) with check (true);
 --   create policy "Anyone can read customers"   on customers for select using (true);
---   alter table customers add column if not exists avatar_url text;
---   alter table customers add column if not exists username   text unique;
---   alter table customers add column if not exists password   text;
+--   alter table customers add column if not exists avatar_url    text;
+--   alter table customers add column if not exists username      text unique;
+--   alter table customers add column if not exists password      text;
+--   alter table customers add column if not exists contact_phone text;
+--   alter table orders    add column if not exists contact_phone text;
 --
 -- ============================================================
 
@@ -113,9 +115,11 @@ create table if not exists customers (
 );
 
 -- If running against an existing DB, add columns safely:
-alter table customers add column if not exists avatar_url text;
-alter table customers add column if not exists username   text unique;
-alter table customers add column if not exists password   text;
+alter table customers add column if not exists avatar_url     text;
+alter table customers add column if not exists username       text unique;
+alter table customers add column if not exists password       text;
+alter table customers add column if not exists contact_phone  text;
+alter table orders    add column if not exists contact_phone  text;
 
 alter table customers enable row level security;
 -- Anyone (anon key) can upsert their own record by phone
