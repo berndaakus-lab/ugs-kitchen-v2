@@ -63,6 +63,10 @@ export function BranchProvider({ children }) {
     setShowSelector(true)
   }
 
+  function closeSelector() {
+    if (currentBranch) setShowSelector(false)
+  }
+
   return (
     <BranchContext.Provider value={{
       branches,
@@ -71,6 +75,7 @@ export function BranchProvider({ children }) {
       showSelector,
       selectBranch,
       switchBranch,
+      closeSelector,
     }}>
       {children}
     </BranchContext.Provider>

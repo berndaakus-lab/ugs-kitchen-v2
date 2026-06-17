@@ -3,7 +3,7 @@ import { MapPin, ChevronRight, Search, X } from 'lucide-react'
 import { useBranch } from '../context/BranchContext'
 
 export default function BranchSelector() {
-  const { branches, showSelector, selectBranch } = useBranch()
+  const { branches, showSelector, selectBranch, currentBranch, closeSelector } = useBranch()
   const [query, setQuery] = useState('')
 
   if (!showSelector) return null
@@ -18,10 +18,20 @@ export default function BranchSelector() {
       <div className="w-full max-w-lg bg-brand-cream rounded-t-3xl sm:rounded-3xl animate-slide-up sm:animate-fade-in">
 
         {/* Header */}
-        <div className="px-6 pt-8 pb-4 text-center">
+        <div className="px-6 pt-6 pb-4 text-center relative">
+          {/* Close button — only shown when switching, not on first pick */}
+          {currentBranch && (
+            <button
+              onClick={closeSelector}
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
+          )}
           <img src="/logo-ugs.jpeg" alt="UGs Kitchen" className="w-14 h-14 object-contain mx-auto mb-4" />
           <h1 className="text-2xl font-extrabold text-brand-dark leading-tight">
-            Welcome to UGs Kitchen!
+            {currentBranch ? 'Switch Branch' : 'Welcome to UGs Kitchen!'}
           </h1>
           <p className="text-gray-500 text-sm mt-1">
             Select your nearest branch to see the menu and place your order.

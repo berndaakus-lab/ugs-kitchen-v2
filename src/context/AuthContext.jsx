@@ -97,6 +97,27 @@ export function AuthProvider({ children }) {
     return { data: session }
   }, [])
 
+  const updateProfile = useCallback(async ({ name, avatar_url }) => {
+    if (!customer) return { error: 'Not logged in.' }
+    const updates = {}
+    if (name !== undefined)       updates.name       = name.trim()
+    if (avatar_url !== undefined) updates.avatar_url = avatar_url
+
+    const { data, error } = await supabase
+      .from('customers')
+      .update(updates)
+      .eq('id', customer.id)
+      .select()
+      .single()
+
+    if (error) return { error: 'Could not update profile.' }
+
+    const session = { ...customer, name: data.name, avatar_url: data.avatar_url ?? customer.avatar_url }
+    setCustomer(session)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+    return { data: session }
+  }, [customer])
+
   const signOut = useCallback(() => {
     setCustomer(null)
     localStorage.removeItem(SESSION_KEY)
@@ -111,6 +132,7 @@ export function AuthProvider({ children }) {
       signInByPhone,
       signUp,
       signOut,
+      updateProfile,
       validatePhone,
     }}>
       {children}
