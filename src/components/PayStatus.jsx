@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, UtensilsCrossed, Clock, Copy, Check, LogIn } from 'lucide-react'
 import Link from 'next/link'
-import { msgReadyReminder, smsPhone } from '../lib/sms'
 
 const REMINDER_KEY = 'ugs_reminder'
 
-async function fireReminderSMS(order) {
+async function fireAutoReady(order) {
   try {
-    await fetch('/api/send-sms', {
+    await fetch('/api/auto-ready', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ to: smsPhone(order), message: msgReadyReminder(order) }),
+      body:    JSON.stringify({ orderId: order.id }),
     })
   } catch {}
   localStorage.removeItem(REMINDER_KEY)
@@ -61,7 +60,7 @@ export default function PayStatus({ order, onDismiss }) {
         if (prev <= 1) {
           clearInterval(interval)
           setDone(true)
-          fireReminderSMS(order)
+          fireAutoReady(order)
           return 0
         }
         return prev - 1

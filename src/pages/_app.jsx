@@ -10,8 +10,8 @@ const COMING_SOON = process.env.NEXT_PUBLIC_COMING_SOON === 'true'
 
 const REMINDER_KEY = 'ugs_reminder'
 
-// Backup: if customer left before the 30-min countdown finished,
-// fire the SMS the next time they open the app (if time has passed).
+// Backup: if customer closed the app before the countdown finished,
+// fire auto-ready the next time they open the app (if time has passed).
 function useReminderBackup() {
   useEffect(() => {
     try {
@@ -22,34 +22,22 @@ function useReminderBackup() {
 
       const msLeft = fireAt - Date.now()
 
-      if (msLeft <= 0) {
-        // Already overdue — fire immediately
-        fetch('/api/send-sms', {
+      function callAutoReady() {
+        fetch('/api/auto-ready', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            to:      order.contact_phone || order.momo_number,
-            message: `Hi ${order.customer_name}! ⏰ Your UGs Kitchen order should be ready very soon. Order #${String(order.id).slice(-6).toUpperCase()} — ${order.delivery_location}. We will SMS you once confirmed ready!`,
-          }),
+          body:    JSON.stringify({ orderId: order.id }),
         }).catch(() => {})
         localStorage.removeItem(REMINDER_KEY)
+      }
+
+      if (msLeft <= 0) {
+        callAutoReady()
       } else {
-        // Still counting down — set a timeout for the remaining time
-        const timer = setTimeout(() => {
-          fetch('/api/send-sms', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-              to:      order.contact_phone || order.momo_number,
-              message: `Hi ${order.customer_name}! ⏰ Your UGs Kitchen order should be ready very soon. Order #${String(order.id).slice(-6).toUpperCase()} — ${order.delivery_location}. We will SMS you once confirmed ready!`,
-            }),
-          }).catch(() => {})
-          localStorage.removeItem(REMINDER_KEY)
-        }, msLeft)
+        const timer = setTimeout(callAutoReady, msLeft)
         return () => clearTimeout(timer)
       }
     } catch {
-      // Corrupt localStorage entry — just clear it
       localStorage.removeItem(REMINDER_KEY)
     }
   }, [])

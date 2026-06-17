@@ -15,13 +15,21 @@ function PreparingCountdown({ order }) {
   const [remaining, setRemaining] = useState(() => Math.max(0, Math.floor((endMs - Date.now()) / 1000)))
 
   useEffect(() => {
-    if (remaining <= 0) return
+    if (remaining <= 0) {
+      // Fire auto-ready when countdown reaches zero on the orders page
+      fetch('/api/auto-ready', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ orderId: order.id }),
+      }).catch(() => {})
+      return
+    }
     const id = setInterval(() => {
       const left = Math.max(0, Math.floor((endMs - Date.now()) / 1000))
       setRemaining(left)
     }, 1000)
     return () => clearInterval(id)
-  }, [endMs])
+  }, [endMs, remaining, order.id])
 
   const pct  = Math.min(100, Math.round(((totalSecs - remaining) / totalSecs) * 100))
   const circ = 2 * Math.PI * 20
