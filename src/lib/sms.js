@@ -84,7 +84,7 @@ export function msgOrderConfirmed(order) {
     `Items: ${items}\n` +
     `Total: GH₵${Number(order.total_amount).toFixed(2)}\n` +
     `Delivery: ${order.delivery_location}\n` +
-    `Your food will be ready in about 30 mins. We will SMS you when it is ready!`
+    `Your food will be ready in about ${order.wait_time_minutes ?? 30} mins. We will SMS you when it is ready!`
   )
 }
 
