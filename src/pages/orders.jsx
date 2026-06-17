@@ -126,7 +126,7 @@ export default function OrdersPage() {
     setLoading(false)
   }
 
-  // Realtime: listen to ALL order updates, patch matching ones into local state
+  // Realtime: listen to order updates and patch into local state
   useEffect(() => {
     if (!isLoggedIn || !customer || orders.length === 0) return
 
@@ -146,6 +146,37 @@ export default function OrdersPage() {
     return () => { supabase.removeChannel(channel) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn, customer, orders.length])
+
+  // Fallback poll every 10s for active orders in case Realtime misses an update
+  useEffect(() => {
+    if (!isLoggedIn || !customer) return
+    const hasActive = orders.some(o => ['paid', 'preparing'].includes(o.status))
+    if (!hasActive) return
+
+    const id = setInterval(async () => {
+      const activeIds = orders
+        .filter(o => ['paid', 'preparing'].includes(o.status))
+        .map(o => o.id)
+      if (activeIds.length === 0) return
+
+      const { data } = await supabase
+        .from('orders')
+        .select('*')
+        .in('id', activeIds)
+
+      if (data) {
+        setOrders(prev =>
+          prev.map(o => {
+            const fresh = data.find(d => d.id === o.id)
+            return fresh ? { ...o, ...fresh } : o
+          })
+        )
+      }
+    }, 10000)
+
+    return () => clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, customer, orders])
 
   function handleReorder(order) {
     const items = order.items ?? []
