@@ -201,6 +201,92 @@ function StatCard({ icon, label, value, sub, color = 'orange' }) {
   )
 }
 
+// ── Category Image Manager ────────────────────────────────────
+function CategoryImageManager({ categories, onUpdate }) {
+  const [open,    setOpen]    = useState(false)
+  const [editing, setEditing] = useState({}) // { [id]: imageUrl }
+  const [saving,  setSaving]  = useState({}) // { [id]: bool }
+
+  function startEdit(cat) {
+    setEditing(prev => ({ ...prev, [cat.id]: cat.image ?? '' }))
+  }
+
+  async function saveImage(cat) {
+    setSaving(prev => ({ ...prev, [cat.id]: true }))
+    await fetch('/api/admin/update-category', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ categoryId: cat.id, image: editing[cat.id] || null }),
+    })
+    setSaving(prev => ({ ...prev, [cat.id]: false }))
+    setEditing(prev => { const n = { ...prev }; delete n[cat.id]; return n })
+    onUpdate()
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-brand-muted overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-bold text-brand-dark"
+      >
+        <span>📂 Category Images</span>
+        <span className="text-gray-400 text-xs font-normal">{open ? 'hide' : 'manage'}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-brand-muted divide-y divide-brand-muted">
+          {categories.map(cat => (
+            <div key={cat.id} className="px-4 py-3 flex items-center gap-3">
+              {/* Current image preview */}
+              {cat.image ? (
+                <img src={cat.image} alt={cat.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+              ) : (
+                <div className="w-10 h-10 rounded-lg bg-brand-cream flex items-center justify-center flex-shrink-0 text-lg">🍽️</div>
+              )}
+
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-brand-dark mb-1">{cat.name}</p>
+                {editing[cat.id] !== undefined ? (
+                  <div className="flex gap-2">
+                    <input
+                      value={editing[cat.id]}
+                      onChange={e => setEditing(prev => ({ ...prev, [cat.id]: e.target.value }))}
+                      placeholder="Paste Supabase image URL…"
+                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-brand-orange"
+                    />
+                    <button
+                      onClick={() => saveImage(cat)}
+                      disabled={saving[cat.id]}
+                      className="text-xs font-bold text-white bg-brand-brown px-3 py-1.5 rounded-lg disabled:opacity-50"
+                    >
+                      {saving[cat.id] ? '…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => setEditing(prev => { const n = { ...prev }; delete n[cat.id]; return n })}
+                      className="text-xs text-gray-400 px-2"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => startEdit(cat)} className="text-xs text-brand-orange font-semibold">
+                    {cat.image ? 'Change image' : '+ Add image'}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          <div className="px-4 py-2 bg-brand-cream">
+            <p className="text-[11px] text-gray-400">
+              Upload images to Supabase → Storage → menu-images, then paste the public URL here.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Order Detail Modal ────────────────────────────────────────
 function OrderModal({ order, onClose, onStatusChange }) {
   if (!order) return null
@@ -712,7 +798,7 @@ export default function AdminPage() {
   }, [menuPage, menuBranch])
 
   const fetchCategories = useCallback(async () => {
-    let query = supabase.from('categories').select('id, name, branch_id').order('sort_order')
+    let query = supabase.from('categories').select('id, name, branch_id, image, sort_order').order('sort_order')
     if (menuBranch !== 'all') query = query.eq('branch_id', menuBranch)
     const { data } = await query
     setCategories(data ?? [])
@@ -1269,6 +1355,11 @@ export default function AdminPage() {
                   <Plus size={15} /> Add Item
                 </button>
               </div>
+
+              {/* Category image manager */}
+              {categories.length > 0 && (
+                <CategoryImageManager categories={categories} onUpdate={fetchCategories} />
+              )}
 
               {/* Count + pagination info */}
               {menuTotal > 0 && (

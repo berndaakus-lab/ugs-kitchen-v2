@@ -179,9 +179,12 @@ create table if not exists categories (
   id          uuid primary key default uuid_generate_v4(),
   branch_id   uuid references branches(id) on delete cascade,
   name        text not null,
+  image       text,           -- public URL from menu-images bucket
   sort_order  int  not null default 0,
   created_at  timestamptz default now()
 );
+
+alter table categories add column if not exists image text;
 
 -- ─── MENU ITEMS ─────────────────────────────────────────────
 create table if not exists menu_items (
@@ -313,48 +316,198 @@ insert into branches (id, name, slug, address, delivery_locations, sort_order) v
     2
   );
 
--- ── Categories (assigned to Central branch) ──────────────────
+-- ── Categories ───────────────────────────────────────────────
+-- Same categories for both branches. image URLs to be set from admin panel.
 insert into categories (id, branch_id, name, sort_order) values
-  ('a1000000-0000-0000-0000-000000000001', 'b1000000-0000-0000-0000-000000000001', 'Rice Dishes',    1),
-  ('a1000000-0000-0000-0000-000000000002', 'b1000000-0000-0000-0000-000000000001', 'Soups & Stews',  2),
-  ('a1000000-0000-0000-0000-000000000003', 'b1000000-0000-0000-0000-000000000001', 'Sides & Extras', 3),
-  ('a1000000-0000-0000-0000-000000000004', 'b1000000-0000-0000-0000-000000000001', 'Drinks',         4),
-  -- KTU branch categories
-  ('a2000000-0000-0000-0000-000000000001', 'b1000000-0000-0000-0000-000000000002', 'Rice Dishes',    1),
-  ('a2000000-0000-0000-0000-000000000002', 'b1000000-0000-0000-0000-000000000002', 'Soups & Stews',  2),
-  ('a2000000-0000-0000-0000-000000000003', 'b1000000-0000-0000-0000-000000000002', 'Sides & Extras', 3),
-  ('a2000000-0000-0000-0000-000000000004', 'b1000000-0000-0000-0000-000000000002', 'Drinks',         4);
+  -- Central branch
+  ('a1000000-0000-0000-0000-000000000001', 'b1000000-0000-0000-0000-000000000001', 'Fried Rice',          1),
+  ('a1000000-0000-0000-0000-000000000002', 'b1000000-0000-0000-0000-000000000001', 'Jollof Rice',         2),
+  ('a1000000-0000-0000-0000-000000000003', 'b1000000-0000-0000-0000-000000000001', 'Special Chicken',     3),
+  ('a1000000-0000-0000-0000-000000000004', 'b1000000-0000-0000-0000-000000000001', 'Special Beef',        4),
+  ('a1000000-0000-0000-0000-000000000005', 'b1000000-0000-0000-0000-000000000001', 'Special Egg',         5),
+  ('a1000000-0000-0000-0000-000000000006', 'b1000000-0000-0000-0000-000000000001', 'Assorted',            6),
+  ('a1000000-0000-0000-0000-000000000007', 'b1000000-0000-0000-0000-000000000001', 'Vegetable Noodles',   7),
+  ('a1000000-0000-0000-0000-000000000008', 'b1000000-0000-0000-0000-000000000001', 'Fries & Chips',       8),
+  ('a1000000-0000-0000-0000-000000000009', 'b1000000-0000-0000-0000-000000000001', 'Special Meat Fries',  9),
+  ('a1000000-0000-0000-0000-000000000010', 'b1000000-0000-0000-0000-000000000001', 'Banku',               10),
+  ('a1000000-0000-0000-0000-000000000011', 'b1000000-0000-0000-0000-000000000001', 'Add Ons',             11),
+  ('a1000000-0000-0000-0000-000000000012', 'b1000000-0000-0000-0000-000000000001', 'Natural Juice',       12),
+  ('a1000000-0000-0000-0000-000000000013', 'b1000000-0000-0000-0000-000000000001', 'Drinks',              13),
+  ('a1000000-0000-0000-0000-000000000014', 'b1000000-0000-0000-0000-000000000001', 'Student Pack',        14),
+  -- KTU branch (same categories)
+  ('a2000000-0000-0000-0000-000000000001', 'b1000000-0000-0000-0000-000000000002', 'Fried Rice',          1),
+  ('a2000000-0000-0000-0000-000000000002', 'b1000000-0000-0000-0000-000000000002', 'Jollof Rice',         2),
+  ('a2000000-0000-0000-0000-000000000003', 'b1000000-0000-0000-0000-000000000002', 'Special Chicken',     3),
+  ('a2000000-0000-0000-0000-000000000004', 'b1000000-0000-0000-0000-000000000002', 'Special Beef',        4),
+  ('a2000000-0000-0000-0000-000000000005', 'b1000000-0000-0000-0000-000000000002', 'Special Egg',         5),
+  ('a2000000-0000-0000-0000-000000000006', 'b1000000-0000-0000-0000-000000000002', 'Assorted',            6),
+  ('a2000000-0000-0000-0000-000000000007', 'b1000000-0000-0000-0000-000000000002', 'Vegetable Noodles',   7),
+  ('a2000000-0000-0000-0000-000000000008', 'b1000000-0000-0000-0000-000000000002', 'Fries & Chips',       8),
+  ('a2000000-0000-0000-0000-000000000009', 'b1000000-0000-0000-0000-000000000002', 'Special Meat Fries',  9),
+  ('a2000000-0000-0000-0000-000000000010', 'b1000000-0000-0000-0000-000000000002', 'Banku',               10),
+  ('a2000000-0000-0000-0000-000000000011', 'b1000000-0000-0000-0000-000000000002', 'Add Ons',             11),
+  ('a2000000-0000-0000-0000-000000000012', 'b1000000-0000-0000-0000-000000000002', 'Natural Juice',       12),
+  ('a2000000-0000-0000-0000-000000000013', 'b1000000-0000-0000-0000-000000000002', 'Drinks',              13),
+  ('a2000000-0000-0000-0000-000000000014', 'b1000000-0000-0000-0000-000000000002', 'Student Pack',        14);
 
--- ── Menu Items ────────────────────────────────────────────────
--- Central Branch
-insert into menu_items (branch_id, name, category_id, price, description, is_available, is_popular, sort_order) values
-  ('b1000000-0000-0000-0000-000000000001', 'Jollof Rice + Chicken',    'a1000000-0000-0000-0000-000000000001', 35.00, 'Party-style jollof with grilled chicken',            true, true,  1),
-  ('b1000000-0000-0000-0000-000000000001', 'Fried Rice + Fish',        'a1000000-0000-0000-0000-000000000001', 30.00, 'Classic fried rice with crispy tilapia',             true, false, 2),
-  ('b1000000-0000-0000-0000-000000000001', 'Waakye + Egg',             'a1000000-0000-0000-0000-000000000001', 25.00, 'Rice & beans with boiled egg & wele',               true, true,  3),
-  ('b1000000-0000-0000-0000-000000000001', 'Plain Rice + Stew',        'a1000000-0000-0000-0000-000000000001', 20.00, 'Steamed rice with tomato-based stew',               true, false, 4),
-  ('b1000000-0000-0000-0000-000000000001', 'Light Soup + Fufu',        'a1000000-0000-0000-0000-000000000002', 40.00, 'Traditional light soup with pounded fufu',          true, true,  1),
-  ('b1000000-0000-0000-0000-000000000001', 'Groundnut Soup + Rice',    'a1000000-0000-0000-0000-000000000002', 38.00, 'Rich peanut soup served with rice balls',           true, false, 2),
-  ('b1000000-0000-0000-0000-000000000001', 'Kontomire Stew + Yam',     'a1000000-0000-0000-0000-000000000002', 30.00, 'Cocoyam leaves stew with boiled yam',              true, false, 3),
-  ('b1000000-0000-0000-0000-000000000001', 'Palmnut Soup + Banku',     'a1000000-0000-0000-0000-000000000002', 42.00, 'Banga soup with fermented corn & cassava dough',   true, true,  4),
-  ('b1000000-0000-0000-0000-000000000001', 'Extra Chicken',            'a1000000-0000-0000-0000-000000000003', 15.00, 'Grilled half chicken',                             true, false, 1),
-  ('b1000000-0000-0000-0000-000000000001', 'Fried Plantain (Kelewele)','a1000000-0000-0000-0000-000000000003', 10.00, 'Spiced fried ripe plantain',                       true, true,  2),
-  ('b1000000-0000-0000-0000-000000000001', 'Boiled Egg',               'a1000000-0000-0000-0000-000000000003',  5.00, 'One boiled egg',                                   true, false, 3),
-  ('b1000000-0000-0000-0000-000000000001', 'Extra Fufu / Banku',       'a1000000-0000-0000-0000-000000000003',  8.00, 'Extra swallow portion',                            true, false, 4),
-  ('b1000000-0000-0000-0000-000000000001', 'Sobolo (Sorrel Drink)',    'a1000000-0000-0000-0000-000000000004',  8.00, 'Chilled hibiscus drink',                           true, true,  1),
-  ('b1000000-0000-0000-0000-000000000001', 'Bottled Water',            'a1000000-0000-0000-0000-000000000004',  4.00, '500ml bottled water',                              true, false, 2),
-  ('b1000000-0000-0000-0000-000000000001', 'Malta',                    'a1000000-0000-0000-0000-000000000004',  7.00, 'Chilled Malta Guinness',                           true, false, 3),
-  ('b1000000-0000-0000-0000-000000000001', 'Mineral (Soft Drink)',     'a1000000-0000-0000-0000-000000000004',  6.00, 'Coke, Sprite, or Fanta',                          true, false, 4),
+-- ── Menu Items (Central Branch) ───────────────────────────────
+-- Prices missing from images can be updated from the admin panel.
 
-  -- KTU Branch (same menu — prices can be adjusted per branch anytime)
-  ('b1000000-0000-0000-0000-000000000002', 'Jollof Rice + Chicken',    'a2000000-0000-0000-0000-000000000001', 35.00, 'Party-style jollof with grilled chicken',           true, true,  1),
-  ('b1000000-0000-0000-0000-000000000002', 'Fried Rice + Fish',        'a2000000-0000-0000-0000-000000000001', 30.00, 'Classic fried rice with crispy tilapia',            true, false, 2),
-  ('b1000000-0000-0000-0000-000000000002', 'Waakye + Egg',             'a2000000-0000-0000-0000-000000000001', 25.00, 'Rice & beans with boiled egg & wele',              true, true,  3),
-  ('b1000000-0000-0000-0000-000000000002', 'Plain Rice + Stew',        'a2000000-0000-0000-0000-000000000001', 20.00, 'Steamed rice with tomato-based stew',              true, false, 4),
-  ('b1000000-0000-0000-0000-000000000002', 'Light Soup + Fufu',        'a2000000-0000-0000-0000-000000000002', 40.00, 'Traditional light soup with pounded fufu',         true, true,  1),
-  ('b1000000-0000-0000-0000-000000000002', 'Groundnut Soup + Rice',    'a2000000-0000-0000-0000-000000000002', 38.00, 'Rich peanut soup served with rice balls',          true, false, 2),
-  ('b1000000-0000-0000-0000-000000000002', 'Palmnut Soup + Banku',     'a2000000-0000-0000-0000-000000000002', 42.00, 'Banga soup with fermented corn & cassava dough',  true, true,  3),
-  ('b1000000-0000-0000-0000-000000000002', 'Extra Chicken',            'a2000000-0000-0000-0000-000000000003', 15.00, 'Grilled half chicken',                            true, false, 1),
-  ('b1000000-0000-0000-0000-000000000002', 'Fried Plantain (Kelewele)','a2000000-0000-0000-0000-000000000003', 10.00, 'Spiced fried ripe plantain',                      true, true,  2),
-  ('b1000000-0000-0000-0000-000000000002', 'Sobolo (Sorrel Drink)',    'a2000000-0000-0000-0000-000000000004',  8.00, 'Chilled hibiscus drink',                          true, true,  1),
-  ('b1000000-0000-0000-0000-000000000002', 'Bottled Water',            'a2000000-0000-0000-0000-000000000004',  4.00, '500ml bottled water',                             true, false, 2),
-  ('b1000000-0000-0000-0000-000000000002', 'Mineral (Soft Drink)',     'a2000000-0000-0000-0000-000000000004',  6.00, 'Coke, Sprite, or Fanta',                         true, false, 3);
+-- FRIED RICE
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Fried Chicken (Regular)',  40.00, 20, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Fried Chicken (Classic)',  50.00, 20, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Fried Chicken (Boss)',     60.00, 20, true, 3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Fried Chicken (Champion)', 70.00, 20, true, 4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Fried Fish (Regular)',     40.00, 20, true, 5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Fried Fish (Classic)',     50.00, 20, true, 6),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Fried Fish (Boss)',        60.00, 20, true, 7),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Fried Fish (Champion)',    70.00, 20, true, 8),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Tilapia (Classic)',        69.00, 20, true, 9),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Tilapia (Boss)',           84.00, 20, true, 10),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Fried Rice with Tilapia (Champion)',       99.00, 20, true, 11);
+
+-- JOLLOF RICE
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Fried Chicken (Regular)',  40.00, 20, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Fried Chicken (Classic)',  50.00, 20, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Fried Chicken (Boss)',     60.00, 20, true, 3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Fried Chicken (Champion)', 70.00, 20, true, 4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Fried Fish (Regular)',     40.00, 20, true, 5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Fried Fish (Classic)',     50.00, 20, true, 6),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Fried Fish (Boss)',        60.00, 20, true, 7),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Fried Fish (Champion)',    70.00, 20, true, 8),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Tilapia (Classic)',        69.00, 20, true, 9),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Tilapia (Boss)',           84.00, 20, true, 10),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000002','Jollof Rice with Tilapia (Champion)',       99.00, 20, true, 11);
+
+-- SPECIAL CHICKEN
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000003','Special Chicken Fried Rice (Classic)',   64.00, 25, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000003','Special Chicken Fried Rice (Boss)',      79.00, 25, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000003','Special Chicken Fried Rice (Champion)',  99.00, 25, true, 3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000003','Special Chicken Jollof Rice (Classic)',  64.00, 25, true, 4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000003','Special Chicken Jollof Rice (Boss)',     79.00, 25, true, 5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000003','Special Chicken Jollof Rice (Champion)', 99.00, 25, true, 6),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000003','Special Chicken Noodles (Classic)',      64.00, 20, true, 7),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000003','Special Chicken Noodles (Boss)',         79.00, 20, true, 8),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000003','Special Chicken Noodles (Champion)',     99.00, 20, true, 9);
+
+-- SPECIAL BEEF
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000004','Special Beef Fried Rice (Classic)',    69.00, 25, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000004','Special Beef Fried Rice (Boss)',       89.00, 25, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000004','Special Beef Fried Rice (Champion)',  109.00, 25, true, 3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000004','Special Beef Jollof Rice (Classic)',   69.00, 25, true, 4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000004','Special Beef Jollof Rice (Boss)',      89.00, 25, true, 5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000004','Special Beef Jollof Rice (Champion)', 109.00, 25, true, 6),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000004','Special Beef Noodles (Classic)',       69.00, 20, true, 7),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000004','Special Beef Noodles (Boss)',          89.00, 20, true, 8),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000004','Special Beef Noodles (Champion)',     109.00, 20, true, 9);
+
+-- SPECIAL EGG
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000005','Special Egg Fried Rice (Classic)',   49.00, 20, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000005','Special Egg Fried Rice (Boss)',      59.00, 20, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000005','Special Egg Fried Rice (Champion)',  69.00, 20, true, 3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000005','Special Egg Jollof Rice (Classic)',  49.00, 20, true, 4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000005','Special Egg Jollof Rice (Boss)',     59.00, 20, true, 5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000005','Special Egg Jollof Rice (Champion)', 69.00, 20, true, 6),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000005','Special Egg Noodles (Classic)',      49.00, 15, true, 7),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000005','Special Egg Noodles (Boss)',         59.00, 15, true, 8),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000005','Special Egg Noodles (Champion)',     69.00, 15, true, 9);
+
+-- ASSORTED
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000006','Assorted Fried Rice (Classic)',    74.00, 25, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000006','Assorted Fried Rice (Boss)',       94.00, 25, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000006','Assorted Fried Rice (Champion)',  129.00, 25, true, 3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000006','Assorted Jollof Rice (Classic)',   74.00, 25, true, 4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000006','Assorted Jollof Rice (Boss)',      94.00, 25, true, 5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000006','Assorted Jollof Rice (Champion)', 129.00, 25, true, 6),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000006','Assorted Noodles (Classic)',       74.00, 20, true, 7),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000006','Assorted Noodles (Boss)',          94.00, 20, true, 8),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000006','Assorted Noodles (Champion)',     129.00, 20, true, 9);
+
+-- VEGETABLE NOODLES
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000007','Vegetable Noodles with Fried Egg (Classic)',  39.00, 15, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000007','Vegetable Noodles with Fried Egg (Boss)',     49.00, 15, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000007','Vegetable Noodles with Fried Egg (Champion)', 59.00, 15, true, 3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000007','MAS Spaghetti with Fried Egg (Classic)',      34.00, 15, true, 4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000007','MAS Spaghetti with Fried Egg (Boss)',         44.00, 15, true, 5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000007','MAS Spaghetti with Fried Egg (Champion)',     54.00, 15, true, 6);
+
+-- FRIES & CHIPS
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Yam Chips with Chicken Wings (Classic)',     49.00, 15, true,  1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Yam Chips with Chicken Wings (Boss)',        64.00, 15, true,  2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Yam Chips with Chicken Wings (Champion)',    79.00, 15, true,  3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Yam Chips with Fish (Classic)',              49.00, 15, true,  4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Yam Chips with Fish (Boss)',                 64.00, 15, true,  5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Yam Chips with Fish (Champion)',             79.00, 15, true,  6),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Yam Chips with Tilapia (Classic)',           69.00, 15, true,  7),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Yam Chips with Tilapia (Boss)',              74.00, 15, true,  8),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Yam Chips with Tilapia (Champion)',          99.00, 15, true,  9),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Potato Chips with Chicken Wings (Classic)',  49.00, 12, true, 10),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Potato Chips with Chicken Wings (Boss)',     64.00, 12, true, 11),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Potato Chips with Chicken Wings (Champion)', 79.00, 12, true, 12),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Potato Chips with Fish (Classic)',           49.00, 12, true, 13),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Potato Chips with Fish (Boss)',              64.00, 12, true, 14),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Potato Chips with Fish (Champion)',          79.00, 12, true, 15),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Potato Chips with Tilapia (Classic)',        69.00, 12, true, 16),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Potato Chips with Tilapia (Boss)',           74.00, 12, true, 17),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000008','Potato Chips with Tilapia (Champion)',       99.00, 12, true, 18);
+
+-- SPECIAL MEAT FRIES
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000009','Special Meat Fries (Classic)',    79.00, 15, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000009','Special Meat Fries (Boss)',       99.00, 15, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000009','Special Meat Fries (Champion)',  124.00, 15, true, 3);
+
+-- BANKU
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000010','Banku with Grilled Tilapia (Classic)',   59.00, 25, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000010','Banku with Grilled Tilapia (Boss)',      74.00, 25, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000010','Banku with Grilled Tilapia (Champion)',  94.00, 25, true, 3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000010','Banku with Fried Tilapia (Classic)',     59.00, 25, true, 4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000010','Banku with Fried Tilapia (Boss)',        74.00, 25, true, 5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000010','Banku with Fried Tilapia (Champion)',    94.00, 25, true, 6),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000010','Extra Banku (1pc)',                       5.00,  5, true, 7);
+
+-- ADD ONS
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Grilled Chicken Mini (1pc)',               25.00,  5, true,  1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Grilled Chicken Max (3pcs)',               70.00,  5, true,  2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Fried Chicken Mini (1pc)',                 20.00,  5, true,  3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Fried Chicken Max (3pcs)',                 55.00,  5, true,  4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Gizzard Stick',                            10.00,  5, true,  5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Chicken Stick',                            15.00,  5, true,  6),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Beef Stick',                               25.00,  5, true,  7),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Mix Meat Stick (Chicken, Beef & Gizzard)', 40.00,  5, true,  8),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Fried Plantain',                            5.00,  5, true,  9),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Chicken Wings (1pc)',                      20.00,  5, true, 10),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Grilled Tilapia Mini',                     60.00, 15, true, 11),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000011','Grilled Tilapia Max',                      80.00, 15, true, 12);
+
+-- NATURAL JUICE
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000012','Mango Juice (Mini)',     15.00, 5, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000012','Mango Juice (Max)',      25.00, 5, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000012','Pineapple Juice (Mini)', 15.00, 5, true, 3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000012','Pineapple Juice (Max)',  25.00, 5, true, 4);
+
+-- DRINKS (add items via admin panel once you know your drinks list)
+
+-- STUDENT PACK (last per client)
+insert into menu_items (branch_id, category_id, name, price, wait_time_minutes, is_available, sort_order) values
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000014','Student Pack: Fried Rice + Fried Chicken (Mini)',  30.00, 15, true, 1),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000014','Student Pack: Fried Rice + Fried Chicken (Max)',   35.00, 15, true, 2),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000014','Student Pack: Jollof Rice + Fried Chicken (Mini)', 30.00, 15, true, 3),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000014','Student Pack: Jollof Rice + Fried Chicken (Max)',  35.00, 15, true, 4),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000014','Student Pack: Veg Noodles + Fried Egg (Mini)',     30.00, 15, true, 5),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000014','Student Pack: Veg Noodles + Fried Egg (Max)',      35.00, 15, true, 6),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000014','Student Pack: Spaghetti + Fried Egg (Mini)',       25.00, 15, true, 7),
+  ('b1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000014','Student Pack: Spaghetti + Fried Egg (Max)',        30.00, 15, true, 8);
+
+-- KTU branch items can be added via admin panel (same menu, adjust prices per branch)
