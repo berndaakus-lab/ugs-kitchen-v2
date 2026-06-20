@@ -6,6 +6,7 @@ import { BranchProvider } from '../context/BranchContext'
 import { AuthProvider }   from '../context/AuthContext'
 import ComingSoon from '../components/ComingSoon'
 import InstallBanner from '../components/InstallBanner'
+import SplashScreen from '../components/SplashScreen'
 
 const COMING_SOON = process.env.NEXT_PUBLIC_COMING_SOON === 'true'
 
@@ -58,6 +59,7 @@ export default function App({ Component, pageProps }) {
     <AuthProvider>
       <BranchProvider>
         <CartProvider>
+          <SplashScreen />
           <Component {...pageProps} />
           <InstallBanner />
         </CartProvider>
