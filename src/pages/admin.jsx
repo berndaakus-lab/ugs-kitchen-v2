@@ -203,24 +203,37 @@ function StatCard({ icon, label, value, sub, color = 'orange' }) {
 
 // ── Category Image Manager ────────────────────────────────────
 function CategoryImageManager({ categories, onUpdate }) {
-  const [open,    setOpen]    = useState(false)
-  const [editing, setEditing] = useState({}) // { [id]: imageUrl }
-  const [saving,  setSaving]  = useState({}) // { [id]: bool }
+  const [open,     setOpen]     = useState(false)
+  const [uploading, setUploading] = useState({}) // { [id]: bool }
+  const [previews,  setPreviews]  = useState({}) // { [id]: localObjectURL }
+  const [errors,    setErrors]    = useState({}) // { [id]: string }
 
-  function startEdit(cat) {
-    setEditing(prev => ({ ...prev, [cat.id]: cat.image ?? '' }))
-  }
+  async function handleFileChange(cat, e) {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-  async function saveImage(cat) {
-    setSaving(prev => ({ ...prev, [cat.id]: true }))
-    await fetch('/api/admin/update-category', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ categoryId: cat.id, image: editing[cat.id] || null }),
-    })
-    setSaving(prev => ({ ...prev, [cat.id]: false }))
-    setEditing(prev => { const n = { ...prev }; delete n[cat.id]; return n })
-    onUpdate()
+    // Show local preview immediately
+    const localUrl = URL.createObjectURL(file)
+    setPreviews(p => ({ ...p, [cat.id]: localUrl }))
+    setErrors(p => ({ ...p, [cat.id]: '' }))
+    setUploading(p => ({ ...p, [cat.id]: true }))
+
+    try {
+      const form = new FormData()
+      form.append('categoryId', cat.id)
+      form.append('file', file)
+
+      const res = await fetch('/api/admin/upload-category-image', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || 'Upload failed.')
+      onUpdate()
+    } catch (err) {
+      setErrors(p => ({ ...p, [cat.id]: err.message }))
+      setPreviews(p => { const n = { ...p }; delete n[cat.id]; return n })
+    } finally {
+      setUploading(p => ({ ...p, [cat.id]: false }))
+      e.target.value = '' // reset so same file can be re-picked
+    }
   }
 
   return (
@@ -229,57 +242,55 @@ function CategoryImageManager({ categories, onUpdate }) {
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-4 py-3 text-sm font-bold text-brand-dark"
       >
-        <span>📂 Category Images</span>
+        <span>🖼️ Category Images</span>
         <span className="text-gray-400 text-xs font-normal">{open ? 'hide' : 'manage'}</span>
       </button>
 
       {open && (
         <div className="border-t border-brand-muted divide-y divide-brand-muted">
-          {categories.map(cat => (
-            <div key={cat.id} className="px-4 py-3 flex items-center gap-3">
-              {/* Current image preview */}
-              {cat.image ? (
-                <img src={cat.image} alt={cat.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-              ) : (
-                <div className="w-10 h-10 rounded-lg bg-brand-cream flex items-center justify-center flex-shrink-0 text-lg">🍽️</div>
-              )}
+          {categories.map(cat => {
+            const preview = previews[cat.id]
+            const imgSrc  = preview || cat.image
+            const busy    = uploading[cat.id]
 
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-brand-dark mb-1">{cat.name}</p>
-                {editing[cat.id] !== undefined ? (
-                  <div className="flex gap-2">
+            return (
+              <div key={cat.id} className="px-4 py-3 flex items-center gap-3">
+                {/* Image preview */}
+                <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-brand-cream">
+                  {imgSrc ? (
+                    <img src={imgSrc} alt={cat.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xl">🍽️</div>
+                  )}
+                  {busy && (
+                    <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                      <span className="text-brand-orange text-xs font-bold animate-pulse">…</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-brand-dark mb-1">{cat.name}</p>
+                  {errors[cat.id] && (
+                    <p className="text-red-500 text-[11px] mb-1">{errors[cat.id]}</p>
+                  )}
+                  <label className={`inline-block text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${busy ? 'opacity-50 pointer-events-none' : 'bg-brand-muted text-brand-brown hover:bg-brand-brown hover:text-white'}`}>
+                    {busy ? 'Uploading…' : imgSrc ? 'Change photo' : '+ Upload photo'}
                     <input
-                      value={editing[cat.id]}
-                      onChange={e => setEditing(prev => ({ ...prev, [cat.id]: e.target.value }))}
-                      placeholder="Paste Supabase image URL…"
-                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-brand-orange"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      disabled={busy}
+                      onChange={e => handleFileChange(cat, e)}
                     />
-                    <button
-                      onClick={() => saveImage(cat)}
-                      disabled={saving[cat.id]}
-                      className="text-xs font-bold text-white bg-brand-brown px-3 py-1.5 rounded-lg disabled:opacity-50"
-                    >
-                      {saving[cat.id] ? '…' : 'Save'}
-                    </button>
-                    <button
-                      onClick={() => setEditing(prev => { const n = { ...prev }; delete n[cat.id]; return n })}
-                      className="text-xs text-gray-400 px-2"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => startEdit(cat)} className="text-xs text-brand-orange font-semibold">
-                    {cat.image ? 'Change image' : '+ Add image'}
-                  </button>
-                )}
+                  </label>
+                </div>
               </div>
-            </div>
-          ))}
-          <div className="px-4 py-2 bg-brand-cream">
-            <p className="text-[11px] text-gray-400">
-              Upload images to Supabase → Storage → menu-images, then paste the public URL here.
-            </p>
+            )
+          })}
+          <div className="px-4 py-2.5 bg-brand-cream">
+            <p className="text-[11px] text-gray-500 font-semibold">Best size: 800 × 600 px (4:3) · JPG or WebP · under 300 KB</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Tap "Upload photo" to pick from your phone or computer — no copy-pasting needed.</p>
           </div>
         </div>
       )}

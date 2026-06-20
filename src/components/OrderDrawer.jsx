@@ -24,13 +24,14 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   // Delivery locations come from the branch record (JSONB array)
   const deliveryLocations = currentBranch?.delivery_locations ?? []
 
-  const [name, setName]         = useState('')
-  const [location, setLocation] = useState('')
-  const [momoNum, setMomoNum]   = useState('')
-  const [notes, setNotes]       = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState('')
-  const drawerRef               = useRef(null)
+  const [name, setName]           = useState('')
+  const [location, setLocation]   = useState('')
+  const [momoNum, setMomoNum]     = useState('')
+  const [notes, setNotes]         = useState('')
+  const [loading, setLoading]     = useState(false)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [toastError, setToastError]   = useState('')
+  const drawerRef                 = useRef(null)
 
   // Auto-fill name from logged-in session when drawer opens
   // MoMo number is intentionally left blank — customer may use a different number
@@ -57,12 +58,20 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   }, [isOpen])
 
   async function handlePlaceOrder() {
-    setError('')
+    setToastError('')
     const phone = momoNum.replace(/\s/g, '')
-    if (!name.trim())        return setError('Please enter your name.')
-    if (!location)           return setError('Please select a delivery location.')
-    if (phone.length !== 10) return setError('Enter a valid 10-digit MoMo number.')
-    if (items.length === 0)  return setError('Your cart is empty.')
+
+    // Validate all fields and show inline errors
+    const errs = {}
+    if (!name.trim())        errs.name = 'Please enter your name.'
+    if (!location)           errs.location = 'Please select a delivery location.'
+    if (phone.length !== 10) errs.momo = 'Enter a valid 10-digit MoMo number.'
+    if (items.length === 0)  errs.momo = 'Your cart is empty.'
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs)
+      return
+    }
+    setFieldErrors({})
 
     setLoading(true)
     try {
@@ -111,7 +120,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       // 3. Poll via Supabase Realtime AND directly via Paystack verify
       pollOrderStatus(order.id, result.reference)
     } catch (err) {
-      setError(err.message)
+      setToastError(err.message)
       setLoading(false)
     }
   }
@@ -141,7 +150,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       clearInterval(pollInterval)
       clearTimeout(timeoutId)
       setLoading(false)
-      setError('Payment failed or was declined. Please try again.')
+      setToastError('Payment failed or was declined. Please try again.')
     }
 
     // Layer 1 — Supabase Realtime (fires instantly when webhook updates the DB)
@@ -189,7 +198,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       channel.unsubscribe()
       clearInterval(pollInterval)
       setLoading(false)
-      setError('Payment timed out. Check your phone and try again.')
+      setToastError('Payment timed out. Check your phone and try again.')
     }, 180_000)
   }
 
@@ -219,6 +228,20 @@ export default function OrderDrawer({ onPaymentSuccess }) {
             <X size={18} />
           </button>
         </div>
+
+        {/* Sticky toast error — always visible, no scrolling needed */}
+        {toastError && (
+          <div className="mx-4 mt-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
+            <span className="text-red-500 mt-0.5 flex-shrink-0">⚠</span>
+            <p className="text-red-600 text-sm font-semibold leading-snug">{toastError}</p>
+            <button
+              onClick={() => setToastError('')}
+              className="ml-auto text-red-400 hover:text-red-600 flex-shrink-0"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
           {/* Cart items */}
@@ -278,10 +301,13 @@ export default function OrderDrawer({ onPaymentSuccess }) {
               <input
                 type="text"
                 value={name}
-                onChange={e => setName(e.target.value)}
+                onChange={e => { setName(e.target.value); setFieldErrors(p => ({ ...p, name: '' })) }}
                 placeholder="e.g. Kwame Mensah"
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base font-semibold outline-none focus:border-brand-orange transition-colors"
+                className={`w-full border-2 rounded-xl px-4 py-3 text-base font-semibold outline-none focus:border-brand-orange transition-colors ${fieldErrors.name ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
               />
+              {fieldErrors.name && (
+                <p className="text-red-500 text-xs font-semibold mt-1 pl-1">{fieldErrors.name}</p>
+              )}
             </div>
 
             <div>
@@ -291,8 +317,8 @@ export default function OrderDrawer({ onPaymentSuccess }) {
               <div className="relative">
                 <select
                   value={location}
-                  onChange={e => setLocation(e.target.value)}
-                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base font-semibold outline-none focus:border-brand-orange appearance-none bg-white transition-colors"
+                  onChange={e => { setLocation(e.target.value); setFieldErrors(p => ({ ...p, location: '' })) }}
+                  className={`w-full border-2 rounded-xl px-4 py-3 text-base font-semibold outline-none focus:border-brand-orange appearance-none bg-white transition-colors ${fieldErrors.location ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
                 >
                   <option value="">Select location…</option>
                   {deliveryLocations.map(loc => (
@@ -304,6 +330,9 @@ export default function OrderDrawer({ onPaymentSuccess }) {
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
                 />
               </div>
+              {fieldErrors.location && (
+                <p className="text-red-500 text-xs font-semibold mt-1 pl-1">{fieldErrors.location}</p>
+              )}
             </div>
 
             <div>
@@ -314,13 +343,17 @@ export default function OrderDrawer({ onPaymentSuccess }) {
                 type="tel"
                 inputMode="numeric"
                 value={momoNum}
-                onChange={e => setMomoNum(formatMoMo(e.target.value))}
+                onChange={e => { setMomoNum(formatMoMo(e.target.value)); setFieldErrors(p => ({ ...p, momo: '' })) }}
                 placeholder="024 XXX XXXX"
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base font-semibold tracking-widest outline-none focus:border-brand-orange transition-colors"
+                className={`w-full border-2 rounded-xl px-4 py-3 text-base font-semibold tracking-widest outline-none focus:border-brand-orange transition-colors ${fieldErrors.momo ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
               />
-              <p className="text-[11px] text-gray-400 mt-1">
-                MTN, Vodafone, or AirtelTigo · SMS confirmation will be sent here
-              </p>
+              {fieldErrors.momo ? (
+                <p className="text-red-500 text-xs font-semibold mt-1 pl-1">{fieldErrors.momo}</p>
+              ) : (
+                <p className="text-[11px] text-gray-400 mt-1">
+                  MTN, Vodafone, or AirtelTigo · SMS confirmation will be sent here
+                </p>
+              )}
             </div>
 
             {/* Special instructions */}
@@ -342,11 +375,6 @@ export default function OrderDrawer({ onPaymentSuccess }) {
             </div>
           </div>
 
-          {error && (
-            <p className="text-red-500 text-sm font-semibold bg-red-50 rounded-xl px-4 py-3 animate-fade-in">
-              {error}
-            </p>
-          )}
         </div>
 
         {/* CTA */}
