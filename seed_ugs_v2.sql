@@ -184,7 +184,8 @@ create table if not exists categories (
   created_at  timestamptz default now()
 );
 
-alter table categories add column if not exists image text;
+alter table categories add column if not exists image       text;
+alter table categories add column if not exists description text;
 
 -- ─── MENU ITEMS ─────────────────────────────────────────────
 create table if not exists menu_items (

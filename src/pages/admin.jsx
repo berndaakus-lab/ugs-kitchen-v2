@@ -201,38 +201,59 @@ function StatCard({ icon, label, value, sub, color = 'orange' }) {
   )
 }
 
-// ── Category Image Manager ────────────────────────────────────
+// ── Category Manager (image + name + description) ─────────────
 function CategoryImageManager({ categories, onUpdate }) {
-  const [open,     setOpen]     = useState(false)
+  const [open,      setOpen]      = useState(false)
   const [uploading, setUploading] = useState({}) // { [id]: bool }
   const [previews,  setPreviews]  = useState({}) // { [id]: localObjectURL }
-  const [errors,    setErrors]    = useState({}) // { [id]: string }
+  const [imgErrors, setImgErrors] = useState({}) // { [id]: string }
+  const [editing,   setEditing]   = useState(null) // cat being text-edited
+  const [saving,    setSaving]    = useState(false)
 
   async function handleFileChange(cat, e) {
     const file = e.target.files?.[0]
     if (!file) return
-
-    // Show local preview immediately
     const localUrl = URL.createObjectURL(file)
     setPreviews(p => ({ ...p, [cat.id]: localUrl }))
-    setErrors(p => ({ ...p, [cat.id]: '' }))
+    setImgErrors(p => ({ ...p, [cat.id]: '' }))
     setUploading(p => ({ ...p, [cat.id]: true }))
-
     try {
       const form = new FormData()
       form.append('categoryId', cat.id)
       form.append('file', file)
-
       const res = await fetch('/api/admin/upload-category-image', { method: 'POST', body: form })
       const data = await res.json()
       if (!res.ok) throw new Error(data.message || 'Upload failed.')
       onUpdate()
     } catch (err) {
-      setErrors(p => ({ ...p, [cat.id]: err.message }))
+      setImgErrors(p => ({ ...p, [cat.id]: err.message }))
       setPreviews(p => { const n = { ...p }; delete n[cat.id]; return n })
     } finally {
       setUploading(p => ({ ...p, [cat.id]: false }))
-      e.target.value = '' // reset so same file can be re-picked
+      e.target.value = ''
+    }
+  }
+
+  async function saveTextEdits() {
+    if (!editing) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/admin/update-category', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryId:  editing.id,
+          name:        editing.name,
+          description: editing.description,
+        }),
+      })
+      if (!res.ok) throw new Error((await res.json()).message)
+      onUpdate()
+      setEditing(null)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -242,7 +263,7 @@ function CategoryImageManager({ categories, onUpdate }) {
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-4 py-3 text-sm font-bold text-brand-dark"
       >
-        <span>🖼️ Category Images</span>
+        <span>🗂️ Manage Categories</span>
         <span className="text-gray-400 text-xs font-normal">{open ? 'hide' : 'manage'}</span>
       </button>
 
@@ -252,45 +273,93 @@ function CategoryImageManager({ categories, onUpdate }) {
             const preview = previews[cat.id]
             const imgSrc  = preview || cat.image
             const busy    = uploading[cat.id]
+            const isEditing = editing?.id === cat.id
 
             return (
-              <div key={cat.id} className="px-4 py-3 flex items-center gap-3">
-                {/* Image preview */}
-                <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-brand-cream">
-                  {imgSrc ? (
-                    <img src={imgSrc} alt={cat.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xl">🍽️</div>
-                  )}
-                  {busy && (
-                    <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                      <span className="text-brand-orange text-xs font-bold animate-pulse">…</span>
+              <div key={cat.id} className="px-4 py-3 space-y-2">
+                <div className="flex items-center gap-3">
+                  {/* Image thumbnail + upload */}
+                  <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-brand-cream">
+                    {imgSrc ? (
+                      <img src={imgSrc} alt={cat.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xl">🍽️</div>
+                    )}
+                    {busy && (
+                      <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                        <span className="text-brand-orange text-xs font-bold animate-pulse">…</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-brand-dark truncate">{cat.name}</p>
+                    {cat.description && !isEditing && (
+                      <p className="text-[11px] text-gray-400 truncate mt-0.5">{cat.description}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <label className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-lg cursor-pointer transition-colors ${busy ? 'opacity-50 pointer-events-none' : 'bg-brand-muted text-brand-brown hover:bg-brand-brown hover:text-white'}`}>
+                        {busy ? 'Uploading…' : imgSrc ? '📷 Change photo' : '📷 Upload photo'}
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busy} onChange={e => handleFileChange(cat, e)} />
+                      </label>
+                      {!isEditing && (
+                        <button
+                          onClick={() => setEditing({ id: cat.id, name: cat.name ?? '', description: cat.description ?? '' })}
+                          className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-brand-muted text-brand-brown hover:bg-brand-brown hover:text-white transition-colors"
+                        >
+                          ✏️ Edit text
+                        </button>
+                      )}
                     </div>
-                  )}
+                    {imgErrors[cat.id] && (
+                      <p className="text-red-500 text-[11px] mt-1">{imgErrors[cat.id]}</p>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-brand-dark mb-1">{cat.name}</p>
-                  {errors[cat.id] && (
-                    <p className="text-red-500 text-[11px] mb-1">{errors[cat.id]}</p>
-                  )}
-                  <label className={`inline-block text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${busy ? 'opacity-50 pointer-events-none' : 'bg-brand-muted text-brand-brown hover:bg-brand-brown hover:text-white'}`}>
-                    {busy ? 'Uploading…' : imgSrc ? 'Change photo' : '+ Upload photo'}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="sr-only"
-                      disabled={busy}
-                      onChange={e => handleFileChange(cat, e)}
-                    />
-                  </label>
-                </div>
+                {/* Inline text editor */}
+                {isEditing && (
+                  <div className="bg-brand-cream rounded-xl p-3 space-y-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Category Name</label>
+                      <input
+                        value={editing.name}
+                        onChange={e => setEditing(p => ({ ...p, name: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold outline-none focus:border-brand-orange bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Description <span className="normal-case font-normal">(shown to customers)</span></label>
+                      <textarea
+                        value={editing.description}
+                        onChange={e => setEditing(p => ({ ...p, description: e.target.value }))}
+                        rows={2}
+                        placeholder="e.g. Choice of fried rice, jollof or spaghetti with chicken"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-orange bg-white resize-none"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveTextEdits}
+                        disabled={saving || !editing.name.trim()}
+                        className="flex-1 text-xs font-bold bg-brand-brown text-white rounded-lg py-2 disabled:opacity-50"
+                      >
+                        {saving ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => setEditing(null)}
+                        className="px-4 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-lg py-2"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
           <div className="px-4 py-2.5 bg-brand-cream">
-            <p className="text-[11px] text-gray-500 font-semibold">Best size: 800 × 600 px (4:3) · JPG or WebP · under 300 KB</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">Tap "Upload photo" to pick from your phone or computer — no copy-pasting needed.</p>
+            <p className="text-[11px] text-gray-500 font-semibold">Photos: 800 × 600 px · JPG or WebP · under 300 KB</p>
           </div>
         </div>
       )}
@@ -811,7 +880,7 @@ export default function AdminPage() {
   }, [menuPage, menuBranch, menuSearch])
 
   const fetchCategories = useCallback(async () => {
-    let query = supabase.from('categories').select('id, name, branch_id, image, sort_order').order('sort_order')
+    let query = supabase.from('categories').select('id, name, description, branch_id, image, sort_order').order('sort_order')
     if (menuBranch !== 'all') query = query.eq('branch_id', menuBranch)
     const { data } = await query
     setCategories(data ?? [])
