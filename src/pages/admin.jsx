@@ -691,6 +691,7 @@ export default function AdminPage() {
   const [menuPage,    setMenuPage]    = useState(0)
   const [menuTotal,   setMenuTotal]   = useState(0)
   const [menuBranch,  setMenuBranch]  = useState('all')
+  const [menuSearch,  setMenuSearch]  = useState('')
   const [categories,  setCategories]  = useState([])
   const [menuForm,    setMenuForm]    = useState(null)   // null=closed, {}=add, item=edit
   const [formSaving,  setFormSaving]  = useState(false)
@@ -802,11 +803,12 @@ export default function AdminPage() {
       .order('sort_order')
       .range(menuPage * MENU_PAGE_SIZE, menuPage * MENU_PAGE_SIZE + MENU_PAGE_SIZE - 1)
     if (menuBranch !== 'all') query = query.eq('branch_id', menuBranch)
+    if (menuSearch.trim()) query = query.ilike('name', `%${menuSearch.trim()}%`)
     const { data, count } = await query
     setMenuItems(data ?? [])
     setMenuTotal(count ?? 0)
     setMenuLoading(false)
-  }, [menuPage, menuBranch])
+  }, [menuPage, menuBranch, menuSearch])
 
   const fetchCategories = useCallback(async () => {
     let query = supabase.from('categories').select('id, name, branch_id, image, sort_order').order('sort_order')
@@ -1367,6 +1369,26 @@ export default function AdminPage() {
                 </button>
               </div>
 
+              {/* Search */}
+              <div className="relative">
+                <input
+                  type="search"
+                  value={menuSearch}
+                  onChange={e => { setMenuSearch(e.target.value); setMenuPage(0) }}
+                  placeholder="Search menu items…"
+                  className="w-full border-2 border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
+                />
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                {menuSearch && (
+                  <button
+                    onClick={() => { setMenuSearch(''); setMenuPage(0) }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                  >×</button>
+                )}
+              </div>
+
               {/* Category image manager */}
               {categories.length > 0 && (
                 <CategoryImageManager categories={categories} onUpdate={fetchCategories} />
@@ -1375,7 +1397,9 @@ export default function AdminPage() {
               {/* Count + pagination info */}
               {menuTotal > 0 && (
                 <p className="text-xs text-gray-400 font-semibold">
-                  Showing {menuPage * MENU_PAGE_SIZE + 1}–{Math.min((menuPage + 1) * MENU_PAGE_SIZE, menuTotal)} of {menuTotal} items
+                  {menuSearch.trim()
+                    ? `${menuTotal} result${menuTotal !== 1 ? 's' : ''} for "${menuSearch.trim()}"`
+                    : `Showing ${menuPage * MENU_PAGE_SIZE + 1}–${Math.min((menuPage + 1) * MENU_PAGE_SIZE, menuTotal)} of ${menuTotal} items`}
                 </p>
               )}
 
