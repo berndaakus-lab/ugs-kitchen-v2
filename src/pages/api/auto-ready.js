@@ -68,7 +68,15 @@ export default async function handler(req, res) {
 
   if (updateErr) return res.status(500).json({ message: updateErr.message })
 
-  const phone = smsPhone(order)
+  // Prefer the customer's current contact_phone or account phone over the stored order field
+  // (covers guests who later set a contact number in their profile)
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('phone, contact_phone')
+    .eq('phone', order.momo_number)
+    .maybeSingle()
+
+  const phone = (customer?.contact_phone) || (customer?.phone) || smsPhone(order)
   let smsSent = false
   if (phone) {
     const result = await sendSMS({ to: phone, message: msgAutoReady(order) })

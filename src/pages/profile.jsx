@@ -36,13 +36,14 @@ export default function ProfilePage() {
   const router = useRouter()
   const { customer, isLoggedIn, loading: authLoading, updateProfile, updatePassword, signOut } = useAuth()
 
-  const [name,        setName]        = useState('')
-  const [avatarUrl,   setAvatarUrl]   = useState(null)
-  const [saving,      setSaving]      = useState(false)
-  const [uploading,   setUploading]   = useState(false)
-  const [saved,       setSaved]       = useState(false)
-  const [error,       setError]       = useState('')
-  const [orderCount,  setOrderCount]  = useState(null)
+  const [name,         setName]        = useState('')
+  const [contactPhone, setContactPhone] = useState('')
+  const [avatarUrl,    setAvatarUrl]   = useState(null)
+  const [saving,       setSaving]      = useState(false)
+  const [uploading,    setUploading]   = useState(false)
+  const [saved,        setSaved]       = useState(false)
+  const [error,        setError]       = useState('')
+  const [orderCount,   setOrderCount]  = useState(null)
 
   const [newPassword,  setNewPassword]  = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -56,6 +57,7 @@ export default function ProfilePage() {
     if (authLoading) return
     if (!isLoggedIn) { router.replace('/?signin=1'); return }
     setName(customer.name ?? '')
+    setContactPhone(customer.contact_phone ?? '')
     setAvatarUrl(customer.avatar_url ?? null)
     loadOrderCount()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,7 +109,7 @@ export default function ProfilePage() {
     setSaving(true)
     setError('')
 
-    const { error: err } = await updateProfile({ name })
+    const { error: err } = await updateProfile({ name, contact_phone: contactPhone || null })
     if (err) setError(err)
     else { setSaved(true); setTimeout(() => setSaved(false), 2000) }
 
@@ -222,7 +224,7 @@ export default function ProfilePage() {
 
             <div>
               <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                Phone Number
+                Login Phone
               </label>
               <div className="relative">
                 <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -232,7 +234,27 @@ export default function ProfilePage() {
                   className="w-full pl-9 pr-4 py-3 border-2 border-gray-100 rounded-xl text-sm font-semibold text-gray-400 bg-gray-50 cursor-not-allowed"
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1">Phone number cannot be changed</p>
+              <p className="text-xs text-gray-400 mt-1">Login phone cannot be changed</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
+                SMS Contact Number <span className="normal-case font-normal text-gray-400">(optional)</span>
+              </label>
+              <div className="relative">
+                <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={contactPhone}
+                  onChange={e => setContactPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="e.g. 0244 XXX XXX"
+                  className="w-full pl-9 pr-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
+                />
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Order SMS alerts will be sent to this number (useful if you pay with someone else's MoMo)
+              </p>
             </div>
 
             {error && (

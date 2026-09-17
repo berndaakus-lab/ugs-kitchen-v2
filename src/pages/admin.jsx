@@ -201,6 +201,172 @@ function StatCard({ icon, label, value, sub, color = 'orange' }) {
   )
 }
 
+// ── Category Manager (image + name + description) ─────────────
+function CategoryImageManager({ categories, onUpdate }) {
+  const [open,      setOpen]      = useState(false)
+  const [uploading, setUploading] = useState({}) // { [id]: bool }
+  const [previews,  setPreviews]  = useState({}) // { [id]: localObjectURL }
+  const [imgErrors, setImgErrors] = useState({}) // { [id]: string }
+  const [editing,   setEditing]   = useState(null) // cat being text-edited
+  const [saving,    setSaving]    = useState(false)
+
+  async function handleFileChange(cat, e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const localUrl = URL.createObjectURL(file)
+    setPreviews(p => ({ ...p, [cat.id]: localUrl }))
+    setImgErrors(p => ({ ...p, [cat.id]: '' }))
+    setUploading(p => ({ ...p, [cat.id]: true }))
+    try {
+      const form = new FormData()
+      form.append('categoryId', cat.id)
+      form.append('file', file)
+      const res = await fetch('/api/admin/upload-category-image', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || 'Upload failed.')
+      onUpdate()
+    } catch (err) {
+      setImgErrors(p => ({ ...p, [cat.id]: err.message }))
+      setPreviews(p => { const n = { ...p }; delete n[cat.id]; return n })
+    } finally {
+      setUploading(p => ({ ...p, [cat.id]: false }))
+      e.target.value = ''
+    }
+  }
+
+  async function saveTextEdits() {
+    if (!editing) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/admin/update-category', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryId:  editing.id,
+          name:        editing.name,
+          description: editing.description,
+        }),
+      })
+      if (!res.ok) throw new Error((await res.json()).message)
+      onUpdate()
+      setEditing(null)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-brand-muted overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-bold text-brand-dark"
+      >
+        <span>🗂️ Manage Categories</span>
+        <span className="text-gray-400 text-xs font-normal">{open ? 'hide' : 'manage'}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-brand-muted divide-y divide-brand-muted">
+          {categories.map(cat => {
+            const preview = previews[cat.id]
+            const imgSrc  = preview || cat.image
+            const busy    = uploading[cat.id]
+            const isEditing = editing?.id === cat.id
+
+            return (
+              <div key={cat.id} className="px-4 py-3 space-y-2">
+                <div className="flex items-center gap-3">
+                  {/* Image thumbnail + upload */}
+                  <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-brand-cream">
+                    {imgSrc ? (
+                      <img src={imgSrc} alt={cat.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xl">🍽️</div>
+                    )}
+                    {busy && (
+                      <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                        <span className="text-brand-orange text-xs font-bold animate-pulse">…</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-brand-dark truncate">{cat.name}</p>
+                    {cat.description && !isEditing && (
+                      <p className="text-[11px] text-gray-400 truncate mt-0.5">{cat.description}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <label className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-lg cursor-pointer transition-colors ${busy ? 'opacity-50 pointer-events-none' : 'bg-brand-muted text-brand-brown hover:bg-brand-brown hover:text-white'}`}>
+                        {busy ? 'Uploading…' : imgSrc ? '📷 Change photo' : '📷 Upload photo'}
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busy} onChange={e => handleFileChange(cat, e)} />
+                      </label>
+                      {!isEditing && (
+                        <button
+                          onClick={() => setEditing({ id: cat.id, name: cat.name ?? '', description: cat.description ?? '' })}
+                          className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-brand-muted text-brand-brown hover:bg-brand-brown hover:text-white transition-colors"
+                        >
+                          ✏️ Edit text
+                        </button>
+                      )}
+                    </div>
+                    {imgErrors[cat.id] && (
+                      <p className="text-red-500 text-[11px] mt-1">{imgErrors[cat.id]}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Inline text editor */}
+                {isEditing && (
+                  <div className="bg-brand-cream rounded-xl p-3 space-y-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Category Name</label>
+                      <input
+                        value={editing.name}
+                        onChange={e => setEditing(p => ({ ...p, name: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold outline-none focus:border-brand-orange bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Description <span className="normal-case font-normal">(shown to customers)</span></label>
+                      <textarea
+                        value={editing.description}
+                        onChange={e => setEditing(p => ({ ...p, description: e.target.value }))}
+                        rows={2}
+                        placeholder="e.g. Choice of fried rice, jollof or spaghetti with chicken"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-orange bg-white resize-none"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveTextEdits}
+                        disabled={saving || !editing.name.trim()}
+                        className="flex-1 text-xs font-bold bg-brand-brown text-white rounded-lg py-2 disabled:opacity-50"
+                      >
+                        {saving ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => setEditing(null)}
+                        className="px-4 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-lg py-2"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          <div className="px-4 py-2.5 bg-brand-cream">
+            <p className="text-[11px] text-gray-500 font-semibold">Photos: 800 × 600 px · JPG or WebP · under 300 KB</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Order Detail Modal ────────────────────────────────────────
 function OrderModal({ order, onClose, onStatusChange }) {
   if (!order) return null
@@ -594,6 +760,7 @@ export default function AdminPage() {
   const [menuPage,    setMenuPage]    = useState(0)
   const [menuTotal,   setMenuTotal]   = useState(0)
   const [menuBranch,  setMenuBranch]  = useState('all')
+  const [menuSearch,  setMenuSearch]  = useState('')
   const [categories,  setCategories]  = useState([])
   const [menuForm,    setMenuForm]    = useState(null)   // null=closed, {}=add, item=edit
   const [formSaving,  setFormSaving]  = useState(false)
@@ -705,14 +872,15 @@ export default function AdminPage() {
       .order('sort_order')
       .range(menuPage * MENU_PAGE_SIZE, menuPage * MENU_PAGE_SIZE + MENU_PAGE_SIZE - 1)
     if (menuBranch !== 'all') query = query.eq('branch_id', menuBranch)
+    if (menuSearch.trim()) query = query.ilike('name', `%${menuSearch.trim()}%`)
     const { data, count } = await query
     setMenuItems(data ?? [])
     setMenuTotal(count ?? 0)
     setMenuLoading(false)
-  }, [menuPage, menuBranch])
+  }, [menuPage, menuBranch, menuSearch])
 
   const fetchCategories = useCallback(async () => {
-    let query = supabase.from('categories').select('id, name, branch_id').order('sort_order')
+    let query = supabase.from('categories').select('id, name, description, branch_id, image, sort_order').order('sort_order')
     if (menuBranch !== 'all') query = query.eq('branch_id', menuBranch)
     const { data } = await query
     setCategories(data ?? [])
@@ -848,7 +1016,17 @@ export default function AdminPage() {
   }
 
   async function handleStatusChange(orderId, newStatus) {
-    await supabase.from('orders').update({ status: newStatus }).eq('id', orderId)
+    const res = await fetch('/api/admin/update-order', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ orderId, status: newStatus }),
+    })
+
+    if (!res.ok) {
+      const { message } = await res.json().catch(() => ({}))
+      console.error('[admin] status update failed:', message)
+      return
+    }
 
     // SMS the customer on key status changes
     const updatedOrder = { ...selectedOrder, status: newStatus }
@@ -1260,10 +1438,37 @@ export default function AdminPage() {
                 </button>
               </div>
 
+              {/* Search */}
+              <div className="relative">
+                <input
+                  type="search"
+                  value={menuSearch}
+                  onChange={e => { setMenuSearch(e.target.value); setMenuPage(0) }}
+                  placeholder="Search menu items…"
+                  className="w-full border-2 border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
+                />
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                {menuSearch && (
+                  <button
+                    onClick={() => { setMenuSearch(''); setMenuPage(0) }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                  >×</button>
+                )}
+              </div>
+
+              {/* Category image manager */}
+              {categories.length > 0 && (
+                <CategoryImageManager categories={categories} onUpdate={fetchCategories} />
+              )}
+
               {/* Count + pagination info */}
               {menuTotal > 0 && (
                 <p className="text-xs text-gray-400 font-semibold">
-                  Showing {menuPage * MENU_PAGE_SIZE + 1}–{Math.min((menuPage + 1) * MENU_PAGE_SIZE, menuTotal)} of {menuTotal} items
+                  {menuSearch.trim()
+                    ? `${menuTotal} result${menuTotal !== 1 ? 's' : ''} for "${menuSearch.trim()}"`
+                    : `Showing ${menuPage * MENU_PAGE_SIZE + 1}–${Math.min((menuPage + 1) * MENU_PAGE_SIZE, menuTotal)} of ${menuTotal} items`}
                 </p>
               )}
 

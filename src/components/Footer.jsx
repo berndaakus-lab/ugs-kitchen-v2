@@ -77,7 +77,7 @@ export default function Footer() {
           <p className="text-xs text-gray-600">
             Powered by{' '}
             <span className="text-brand-orange font-semibold">UGs Kitchen</span>
-            {' '}· Built with ❤️ in Ghana
+            {' '}· Built with ❤️ by BTS in Ghana
           </p>
           <Link
             href="/admin"

@@ -47,28 +47,38 @@ export function AuthProvider({ children }) {
         .maybeSingle()
 
       if (existing) {
-        const session = { id: existing.id, name: existing.name, phone: existing.phone, avatar_url: existing.avatar_url ?? null }
+        const session = { id: existing.id, name: existing.name, phone: existing.phone, contact_phone: existing.contact_phone ?? null, avatar_url: existing.avatar_url ?? null }
         setCustomer(session)
         localStorage.setItem(SESSION_KEY, JSON.stringify(session))
         return { session, isNew: false }
       }
 
       // New customer — generate credentials
-      const username    = generateUsername(name, cleanPhone)
-      const tempPassword = generatePassword()
+      const baseUsername  = generateUsername(name, cleanPhone)
+      const tempPassword  = generatePassword()
 
-      const { data, error } = await supabase
-        .from('customers')
-        .insert({ name: name.trim(), phone: cleanPhone, username, password: tempPassword })
-        .select()
-        .single()
+      // Retry up to 3 times if username is already taken (unique constraint)
+      let data = null
+      let finalUsername = baseUsername
+      for (let attempt = 0; attempt < 3; attempt++) {
+        finalUsername = attempt === 0
+          ? baseUsername
+          : `${baseUsername}${Math.floor(Math.random() * 90) + 10}`
+        const { data: row, error } = await supabase
+          .from('customers')
+          .insert({ name: name.trim(), phone: cleanPhone, username: finalUsername, password: tempPassword })
+          .select()
+          .single()
+        if (!error) { data = row; break }
+        if (!error.message.includes('unique') && !error.message.includes('duplicate')) throw error
+      }
 
-      if (error) throw error
+      if (!data) throw new Error('Could not create account')
 
-      const session = { id: data.id, name: data.name, phone: data.phone, avatar_url: null }
+      const session = { id: data.id, name: data.name, phone: data.phone, contact_phone: data.contact_phone ?? null, avatar_url: null }
       setCustomer(session)
       localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-      return { session, isNew: true, username, tempPassword }
+      return { session, isNew: true, username: finalUsername, tempPassword }
     } catch {
       return null
     }
@@ -87,7 +97,7 @@ export function AuthProvider({ children }) {
 
     if (!data) return { error: 'No account found for this number.' }
 
-    const session = { id: data.id, name: data.name, phone: data.phone, avatar_url: data.avatar_url ?? null }
+    const session = { id: data.id, name: data.name, phone: data.phone, contact_phone: data.contact_phone ?? null, avatar_url: data.avatar_url ?? null }
     setCustomer(session)
     localStorage.setItem(SESSION_KEY, JSON.stringify(session))
     return { data: session }
@@ -107,7 +117,7 @@ export function AuthProvider({ children }) {
     if (!data)                  return { error: 'Username not found.' }
     if (data.password !== password) return { error: 'Incorrect password.' }
 
-    const session = { id: data.id, name: data.name, phone: data.phone, avatar_url: data.avatar_url ?? null }
+    const session = { id: data.id, name: data.name, phone: data.phone, contact_phone: data.contact_phone ?? null, avatar_url: data.avatar_url ?? null }
     setCustomer(session)
     localStorage.setItem(SESSION_KEY, JSON.stringify(session))
     return { data: session }
@@ -156,11 +166,12 @@ export function AuthProvider({ children }) {
     return { data: true }
   }, [customer])
 
-  const updateProfile = useCallback(async ({ name, avatar_url }) => {
+  const updateProfile = useCallback(async ({ name, avatar_url, contact_phone }) => {
     if (!customer) return { error: 'Not logged in.' }
     const updates = {}
-    if (name !== undefined)       updates.name       = name.trim()
-    if (avatar_url !== undefined) updates.avatar_url = avatar_url
+    if (name          !== undefined) updates.name          = name.trim()
+    if (avatar_url    !== undefined) updates.avatar_url    = avatar_url
+    if (contact_phone !== undefined) updates.contact_phone = contact_phone ? contact_phone.replace(/\s/g, '') : null
 
     const { data, error } = await supabase
       .from('customers')
@@ -171,7 +182,7 @@ export function AuthProvider({ children }) {
 
     if (error) return { error: 'Could not update profile.' }
 
-    const session = { ...customer, name: data.name, avatar_url: data.avatar_url ?? customer.avatar_url }
+    const session = { ...customer, name: data.name, contact_phone: data.contact_phone ?? null, avatar_url: data.avatar_url ?? customer.avatar_url }
     setCustomer(session)
     localStorage.setItem(SESSION_KEY, JSON.stringify(session))
     return { data: session }
