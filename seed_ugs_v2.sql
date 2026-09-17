@@ -33,9 +33,9 @@ drop table if exists reviews    cascade;
 drop table if exists orders     cascade;
 drop table if exists menu_items cascade;
 drop table if exists categories cascade;
+drop table if exists staff      cascade;
 drop table if exists branches   cascade;
 drop table if exists customers  cascade;
-drop table if exists staff      cascade;
 
 -- Drop storage policies if bucket already exists
 drop policy if exists "Public can view menu images"      on storage.objects;
@@ -48,39 +48,6 @@ drop policy if exists "Anyone can update their avatar"   on storage.objects;
 
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
-
--- ─── STAFF ───────────────────────────────────────────────────
--- Kitchen staff who can log into the admin dashboard.
--- Role 'staff'  → Orders tab only
--- Role 'admin'  → All tabs (Orders, Reviews, Menu, Staff)
--- The master admin account is stored in env vars (NEXT_PUBLIC_ADMIN_USERNAME / NEXT_PUBLIC_ADMIN_PIN)
--- and does NOT need a row here.
-
-create table if not exists staff (
-  id         uuid primary key default uuid_generate_v4(),
-  name       text    not null,
-  username   text    not null unique,
-  pin        text    not null,
-  role       text    not null default 'staff' check (role in ('admin','staff')),
-  is_active  boolean not null default true,
-  branch_id  uuid references branches(id) on delete set null,
-  created_at timestamptz default now()
-);
-
--- If table already exists, add branch_id safely:
-alter table staff add column if not exists branch_id uuid references branches(id) on delete set null;
-
-alter table staff enable row level security;
--- Anon key can read staff (needed for login verification — PIN is app-level protected)
-create policy "Public can read staff for login"
-  on staff for select using (true);
--- Only via anon key (admin PIN-gated at app level) can manage staff
-create policy "Admin can insert staff"
-  on staff for insert with check (true);
-create policy "Admin can update staff"
-  on staff for update using (true) with check (true);
-create policy "Admin can delete staff"
-  on staff for delete using (true);
 
 -- ─── BRANCHES ────────────────────────────────────────────────
 create table if not exists branches (
@@ -102,6 +69,34 @@ create policy "Public can read active branches"
 create policy "Service role can manage branches"
   on branches for all using (auth.role() = 'service_role');
 
+-- ─── STAFF ───────────────────────────────────────────────────
+-- Kitchen staff who can log into the admin dashboard.
+-- Role 'staff'  → Orders tab only
+-- Role 'admin'  → All tabs (Orders, Reviews, Menu, Staff)
+-- The master admin account is stored in env vars (NEXT_PUBLIC_ADMIN_USERNAME / NEXT_PUBLIC_ADMIN_PIN)
+-- and does NOT need a row here.
+
+create table if not exists staff (
+  id         uuid primary key default uuid_generate_v4(),
+  name       text    not null,
+  username   text    not null unique,
+  pin        text    not null,
+  role       text    not null default 'staff' check (role in ('admin','staff')),
+  is_active  boolean not null default true,
+  branch_id  uuid references branches(id) on delete set null,
+  created_at timestamptz default now()
+);
+
+alter table staff enable row level security;
+create policy "Public can read staff for login"
+  on staff for select using (true);
+create policy "Admin can insert staff"
+  on staff for insert with check (true);
+create policy "Admin can update staff"
+  on staff for update using (true) with check (true);
+create policy "Admin can delete staff"
+  on staff for delete using (true);
+
 -- ─── CUSTOMERS ───────────────────────────────────────────────
 -- Auto-created silently when a customer places their first order
 create table if not exists customers (
@@ -119,7 +114,6 @@ alter table customers add column if not exists avatar_url     text;
 alter table customers add column if not exists username       text unique;
 alter table customers add column if not exists password       text;
 alter table customers add column if not exists contact_phone  text;
-alter table orders    add column if not exists contact_phone  text;
 
 alter table customers enable row level security;
 -- Anyone (anon key) can upsert their own record by phone
