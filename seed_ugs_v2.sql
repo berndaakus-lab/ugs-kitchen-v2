@@ -29,6 +29,7 @@
 -- ============================================================
 
 -- ─── DROP EXISTING TABLES (order matters due to foreign keys) ─
+drop table if exists push_subscriptions cascade;
 drop table if exists reviews    cascade;
 drop table if exists orders     cascade;
 drop table if exists menu_items cascade;
@@ -218,6 +219,11 @@ create table if not exists orders (
   notes                text,
   reminded_at          timestamptz,   -- set when 30-min reminder SMS is sent (prevents duplicates)
   wait_time_minutes    int,           -- estimated prep time stored at order time
+  delivered_by         text,          -- name of the staff/delivery account that marked delivered
+  delivered_by_id      uuid references staff(id) on delete set null,
+  delivered_at         timestamptz,   -- when it was marked delivered
+  review_token         uuid unique,   -- one-time token for the post-delivery review link
+  review_token_used_at timestamptz,   -- set when customer submits review (blocks reuse)
   created_at           timestamptz default now()
 );
 
@@ -265,13 +271,14 @@ alter publication supabase_realtime add table orders;
 -- ─── REVIEWS ─────────────────────────────────────────────────
 create table if not exists reviews (
   id            bigserial primary key,
+  order_id      bigint references orders(id) on delete set null,
   customer_name text not null,
-  momo_number   text not null,           -- used for deduplication only, not shown publicly
+  momo_number   text not null,
   rating        int  not null check (rating between 1 and 5),
   comment       text,
   is_approved   boolean not null default true,
   created_at    timestamptz default now(),
-  unique (momo_number)                   -- one review per MoMo number
+  unique (order_id)                      -- one review per order (token enforces this)
 );
 
 alter table reviews enable row level security;
@@ -286,6 +293,18 @@ create policy "Service role can manage reviews"
   on reviews for all using (auth.role() = 'service_role');
 
 alter publication supabase_realtime add table reviews;
+
+-- ─── PUSH SUBSCRIPTIONS ──────────────────────────────────────
+
+create table if not exists push_subscriptions (
+  id         uuid        primary key default gen_random_uuid(),
+  endpoint   text        unique not null,
+  p256dh     text        not null,
+  auth       text        not null,
+  role       text        not null default 'customer' check (role in ('admin', 'customer')),
+  order_id   bigint      references orders(id) on delete cascade,
+  created_at timestamptz default now()
+);
 
 -- ─── SEED DATA ───────────────────────────────────────────────
 

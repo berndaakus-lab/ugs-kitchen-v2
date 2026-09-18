@@ -124,12 +124,18 @@ export function msgOrderReady(order) {
 
 export function msgOrderDelivered(order) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+  const reviewLink = order.review_token
+    ? `${appUrl}/review?token=${order.review_token}`
+    : null
   return (
     `Hi ${order.customer_name}! ✅ Your UGs Kitchen order has been delivered. Enjoy your meal!\n` +
-    `We would love to hear from you — leave a review: ${appUrl}/review\n` +
+    (reviewLink ? `Leave us a review (link expires in 24 hours): ${reviewLink}\n` : '') +
     `Thank you for choosing UGs Kitchen! 🍽️`
   )
 }
+
+// Alias used by update-order.js after token is already on the order object
+export { msgOrderDelivered as msgOrderDeliveredWithToken }
 
 export function msgOrderCancelled(order) {
   return (

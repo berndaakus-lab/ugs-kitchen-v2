@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
-import { sendSMSClient, smsPhone, STATUS_SMS } from '../lib/sms'
+import { useAdminPush } from '../hooks/usePush'
 import {
   ShoppingBag, Clock, XCircle,
   TrendingUp, RefreshCw, LogOut, Eye,
@@ -60,6 +60,8 @@ function ordersToRows(orders, branchName = '') {
     'Status':        o.status,
     'Channel':       o.payment_channel ?? '',
     'Branch':        branchName || o.branch_id || '',
+    'Delivered By':  o.delivered_by ?? '',
+    'Delivered At':  o.delivered_at ? new Date(o.delivered_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' }) : '',
     'Notes':         o.notes ?? '',
   }))
 }
@@ -416,6 +418,9 @@ function OrderModal({ order, onClose, onStatusChange, onAddTime }) {
           <Row label="MoMo"     value={order.momo_number} />
           <Row label="Time"     value={`${formatDate(order.created_at)} · ${formatTime(order.created_at)}`} />
           <Row label="Total"    value={formatGHS(order.total_amount)} bold />
+          {order.delivered_by && (
+            <Row label="Delivered by" value={`${order.delivered_by}${order.delivered_at ? ' · ' + formatTime(order.delivered_at) : ''}`} />
+          )}
         </div>
 
         {/* Special instructions */}
@@ -745,24 +750,31 @@ function StaffFormModal({ item, branches, onSave, onClose, saving }) {
 
           <div>
             <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Role *</label>
-            <div className="flex gap-3">
-              {['staff', 'admin'].map(r => (
+            <div className="flex gap-2">
+              {[
+                { value: 'staff',    label: '👨‍🍳 Kitchen',  color: 'border-blue-400 bg-blue-50 text-blue-600' },
+                { value: 'delivery', label: '🛵 Delivery',   color: 'border-green-500 bg-green-50 text-green-700' },
+                { value: 'admin',    label: '🛡 Admin',      color: 'border-brand-orange bg-orange-50 text-brand-orange' },
+              ].map(({ value, label, color }) => (
                 <button
-                  key={r}
+                  key={value}
                   type="button"
-                  onClick={() => set('role', r)}
-                  className={`flex-1 py-2.5 rounded-xl font-bold text-sm border-2 transition-colors
-                    ${form.role === r
-                      ? r === 'admin' ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-blue-400 bg-blue-50 text-blue-600'
-                      : 'border-gray-200 bg-white text-gray-500'}`}
+                  onClick={() => set('role', value)}
+                  className={`flex-1 py-2.5 rounded-xl font-bold text-xs border-2 transition-colors
+                    ${form.role === value ? color : 'border-gray-200 bg-white text-gray-500'}`}
                 >
-                  {r === 'admin' ? '🛡 Admin' : '👨‍🍳 Kitchen Staff'}
+                  {label}
                 </button>
               ))}
             </div>
             {form.role === 'admin' && (
               <p className="text-[11px] text-brand-orange font-semibold mt-2">
                 ⚠️ Admin can access all tabs including Menu, Reviews, and Staff management.
+              </p>
+            )}
+            {form.role === 'delivery' && (
+              <p className="text-[11px] text-green-700 font-semibold mt-2">
+                🛵 Delivery accounts log in at /delivery — they only see active delivery orders.
               </p>
             )}
           </div>
@@ -783,6 +795,8 @@ function StaffFormModal({ item, branches, onSave, onClose, saving }) {
 // ── Main Admin Dashboard ──────────────────────────────────────
 export default function AdminPage() {
   const [currentUser,    setCurrentUser]    = useState(null)   // { role, name }
+  // Subscribe for push after login — works for both admin and staff roles
+  useAdminPush(!!currentUser)
   const [activeTab,      setActiveTab]      = useState('orders')
   const [orders,         setOrders]         = useState([])
   const [loading,        setLoading]        = useState(true)
@@ -819,6 +833,8 @@ export default function AdminPage() {
   // Export state
   const [exportOpen,    setExportOpen]    = useState(false)
   const [exporting,     setExporting]     = useState(false)
+  const [exportFrom,    setExportFrom]    = useState('')
+  const [exportTo,      setExportTo]      = useState('')
   const exportRef = useRef(null)
 
   // Close export dropdown on outside click
@@ -836,37 +852,46 @@ export default function AdminPage() {
 
     const branchLabel = branches.find(b => b.id === (currentUser?.branch_id || branchFilter))?.name ?? ''
 
-    if (type === 'day') {
-      // Use already-loaded orders (already filtered by date + branch)
-      const rows = ordersToRows(orders, branchLabel)
-      if (!rows.length) { alert('No orders for this day.'); setExporting(false); return }
-      downloadExcel(rows, `UGs_Orders_${selectedDate}.xlsx`)
-    } else {
-      // Monthly: fetch full month
-      const [y, m] = selectedDate.split('-')
-      const start  = `${y}-${m}-01T00:00:00`
-      const lastDay = new Date(y, m, 0).getDate()
-      const end    = `${y}-${m}-${String(lastDay).padStart(2,'0')}T23:59:59`
-
+    async function fetchRange(start, end) {
       let query = supabase
         .from('orders')
         .select('*')
-        .gte('created_at', start)
-        .lte('created_at', end)
         .order('created_at', { ascending: false })
-
+      if (start) query = query.gte('created_at', start)
+      if (end)   query = query.lte('created_at', end)
       const staffBranch = currentUser?.branch_id
-      if (staffBranch) {
-        query = query.eq('branch_id', staffBranch)
-      } else if (branchFilter !== 'all') {
-        query = query.eq('branch_id', branchFilter)
-      }
-
+      if (staffBranch) query = query.eq('branch_id', staffBranch)
+      else if (branchFilter !== 'all') query = query.eq('branch_id', branchFilter)
       const { data } = await query
-      const rows = ordersToRows(data ?? [], branchLabel)
+      return data ?? []
+    }
+
+    if (type === 'day') {
+      const rows = ordersToRows(orders, branchLabel)
+      if (!rows.length) { alert('No orders for this day.'); setExporting(false); return }
+      downloadExcel(rows, `UGs_Orders_${selectedDate}.xlsx`)
+
+    } else if (type === 'month') {
+      const [y, m] = selectedDate.split('-')
+      const lastDay = new Date(y, m, 0).getDate()
+      const data = await fetchRange(`${y}-${m}-01T00:00:00Z`, `${y}-${m}-${String(lastDay).padStart(2,'0')}T23:59:59Z`)
+      const rows = ordersToRows(data, branchLabel)
       if (!rows.length) { alert('No orders for this month.'); setExporting(false); return }
-      const monthLabel = new Date(`${y}-${m}-01`).toLocaleDateString('en-GH', { month: 'long', year: 'numeric' })
       downloadExcel(rows, `UGs_Orders_${y}-${m}.xlsx`)
+
+    } else if (type === 'range') {
+      if (!exportFrom || !exportTo) { alert('Please select both a start and end date.'); setExporting(false); return }
+      if (exportFrom > exportTo)    { alert('Start date must be before end date.');      setExporting(false); return }
+      const data = await fetchRange(`${exportFrom}T00:00:00Z`, `${exportTo}T23:59:59Z`)
+      const rows = ordersToRows(data, branchLabel)
+      if (!rows.length) { alert('No orders in this date range.'); setExporting(false); return }
+      downloadExcel(rows, `UGs_Orders_${exportFrom}_to_${exportTo}.xlsx`)
+
+    } else if (type === 'all') {
+      const data = await fetchRange(null, null)
+      const rows = ordersToRows(data, branchLabel)
+      if (!rows.length) { alert('No orders found.'); setExporting(false); return }
+      downloadExcel(rows, `UGs_Orders_ALL.xlsx`)
     }
 
     setExporting(false)
@@ -879,10 +904,18 @@ export default function AdminPage() {
       .then(({ data }) => setBranches(data ?? []))
   }, [currentUser])
 
+  // Staff and delivery can only see today (GMT). Admin sees the selected date.
+  const isStaffOrDelivery = currentUser?.role === 'staff' || currentUser?.role === 'delivery'
+  const todayGMT = new Date().toISOString().split('T')[0]
+  const activeDate = isStaffOrDelivery ? todayGMT : selectedDate
+
   const fetchOrders = useCallback(async () => {
     setRefreshing(true)
-    const start = `${selectedDate}T00:00:00`
-    const end   = `${selectedDate}T23:59:59`
+    const date  = (currentUser?.role === 'staff' || currentUser?.role === 'delivery')
+      ? new Date().toISOString().split('T')[0]
+      : selectedDate
+    const start = `${date}T00:00:00Z`
+    const end   = `${date}T23:59:59Z`
 
     let query = supabase
       .from('orders')
@@ -1083,16 +1116,7 @@ export default function AdminPage() {
       return
     }
 
-    // SMS the customer on key status changes
-    const updatedOrder = { ...selectedOrder, status: newStatus }
-    const msgBuilder = STATUS_SMS[newStatus]
-    if (msgBuilder && smsPhone(updatedOrder)) {
-      sendSMSClient({
-        to:      smsPhone(updatedOrder),
-        message: msgBuilder(updatedOrder),
-      })
-    }
-
+    // SMS + push are sent server-side in update-order.js — nothing extra needed here
     setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null)
     fetchOrders()
   }
@@ -1263,21 +1287,30 @@ export default function AdminPage() {
 
           {/* Date picker + Export */}
           <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 font-semibold text-sm outline-none focus:border-brand-orange appearance-none bg-white"
-              />
-            </div>
-            {!isToday && (
-              <button
-                onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-                className="px-3 py-2.5 bg-brand-brown text-white text-sm font-bold rounded-xl flex-shrink-0"
-              >
-                Today
-              </button>
+            {/* Staff and delivery are locked to today — hide the date picker */}
+            {isStaffOrDelivery ? (
+              <div className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-2.5 bg-gray-50 text-sm font-semibold text-gray-500 text-center">
+                📅 Today only
+              </div>
+            ) : (
+              <>
+                <div className="relative flex-1">
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={e => setSelectedDate(e.target.value)}
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 font-semibold text-sm outline-none focus:border-brand-orange appearance-none bg-white"
+                  />
+                </div>
+                {!isToday && (
+                  <button
+                    onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                    className="px-3 py-2.5 bg-brand-brown text-white text-sm font-bold rounded-xl flex-shrink-0"
+                  >
+                    Today
+                  </button>
+                )}
+              </>
             )}
             {/* Export button — admin only */}
             {isAdmin && (
@@ -1296,11 +1329,12 @@ export default function AdminPage() {
                 </button>
 
                 {exportOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-2xl shadow-xl border border-brand-muted z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-brand-muted z-50 overflow-hidden">
                     <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 px-4 pt-3 pb-1">Export as Excel</p>
+
                     <button
                       onClick={() => handleExport('day')}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
                     >
                       <CalendarDays size={16} className="text-brand-orange flex-shrink-0" />
                       <div className="text-left">
@@ -1308,10 +1342,11 @@ export default function AdminPage() {
                         <p className="text-xs text-gray-400">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                       </div>
                     </button>
+
                     <div className="border-t border-gray-100" />
                     <button
                       onClick={() => handleExport('month')}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
                     >
                       <Calendar size={16} className="text-brand-orange flex-shrink-0" />
                       <div className="text-left">
@@ -1319,9 +1354,51 @@ export default function AdminPage() {
                         <p className="text-xs text-gray-400">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GH', { month: 'long', year: 'numeric' })}</p>
                       </div>
                     </button>
+
+                    <div className="border-t border-gray-100" />
+                    {/* Custom date range */}
+                    <div className="px-4 py-3 space-y-2">
+                      <p className="text-xs font-bold text-brand-dark flex items-center gap-1.5">
+                        <FileSpreadsheet size={14} className="text-brand-orange" /> Custom Date Range
+                      </p>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="date"
+                          value={exportFrom}
+                          onChange={e => setExportFrom(e.target.value)}
+                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-brand-orange"
+                        />
+                        <span className="text-xs text-gray-400 flex-shrink-0">to</span>
+                        <input
+                          type="date"
+                          value={exportTo}
+                          onChange={e => setExportTo(e.target.value)}
+                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-brand-orange"
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleExport('range')}
+                        className="w-full bg-brand-orange text-white text-xs font-extrabold rounded-lg py-2 active:bg-brand-brown transition-colors"
+                      >
+                        Download Range
+                      </button>
+                    </div>
+
+                    <div className="border-t border-gray-100" />
+                    <button
+                      onClick={() => handleExport('all')}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
+                    >
+                      <Download size={16} className="text-brand-orange flex-shrink-0" />
+                      <div className="text-left">
+                        <p className="font-bold">All Orders</p>
+                        <p className="text-xs text-gray-400">Every order ever — no date filter</p>
+                      </div>
+                    </button>
+
                     <div className="border-t border-gray-100" />
                     <p className="text-[10px] text-gray-400 px-4 py-2 leading-relaxed">
-                      Downloads an .xlsx file you can open in Excel or Google Sheets.
+                      Downloads an .xlsx file for Excel or Google Sheets.
                     </p>
                   </div>
                 )}
@@ -1672,15 +1749,15 @@ export default function AdminPage() {
                       <div className="flex items-center gap-3">
                         {/* Avatar */}
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-extrabold text-sm
-                          ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : 'bg-blue-50 text-blue-600'}`}>
+                          ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : member.role === 'delivery' ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
                           {member.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-bold text-brand-dark text-sm">{member.name}</p>
                             <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full
-                              ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : 'bg-blue-50 text-blue-600'}`}>
-                              {member.role === 'admin' ? '🛡 Admin' : '👨‍🍳 Staff'}
+                              ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : member.role === 'delivery' ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
+                              {member.role === 'admin' ? '🛡 Admin' : member.role === 'delivery' ? '🛵 Delivery' : '👨‍🍳 Staff'}
                             </span>
                             {!member.is_active && (
                               <span className="text-[10px] font-bold bg-red-50 text-red-400 px-2 py-0.5 rounded-full">Disabled</span>

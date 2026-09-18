@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { createClient } from '@supabase/supabase-js'
 import { sendSMS, smsPhone, msgOrderConfirmed, msgOwnerNewOrder } from '../../lib/sms'
+import { pushAdmins, pushCustomer } from '../../lib/push'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -39,12 +40,26 @@ export default async function handler(req, res) {
           })
           .eq('id', orderId)
 
-        // Send SMS notifications (only fires once — guarded by status check above)
+        // Send notifications (SMS + push) — only fires once
         const ownerPhone = existing.branches?.phone || process.env.OWNER_PHONE
         if (ownerPhone) {
           sendSMS({ to: ownerPhone, message: msgOwnerNewOrder(existing, existing.branches) })
         }
         sendSMS({ to: smsPhone(existing), message: msgOrderConfirmed(existing) })
+
+        const orderRef = `#${String(orderId).slice(-6).toUpperCase()}`
+        pushAdmins({
+          title: '🛍️ New Order!',
+          body:  `${existing.customer_name} placed order ${orderRef} — GH₵ ${Number(existing.total_amount).toFixed(2)}`,
+          url:   '/admin',
+          tag:   `new-order-${orderId}`,
+        }).catch(() => {})
+        pushCustomer(orderId, {
+          title: '✅ Order Confirmed!',
+          body:  `Your order ${orderRef} is confirmed. We're cooking now!`,
+          url:   '/',
+          tag:   `order-confirmed-${orderId}`,
+        }).catch(() => {})
       }
 
       return res.status(200).json({ status: 'paid' })

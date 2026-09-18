@@ -3,7 +3,9 @@
 // Also sends the customer an SMS when status changes.
 
 import { createClient } from '@supabase/supabase-js'
-import { sendSMS, toInternational, STATUS_SMS } from '../../../lib/sms'
+import { createHash, randomUUID } from 'crypto'
+import { sendSMS, toInternational, STATUS_SMS, msgOrderDeliveredWithToken } from '../../../lib/sms'
+import { pushCustomer } from '../../../lib/push'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -13,7 +15,7 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { orderId, status, wait_time_minutes } = req.body ?? {}
+  const { orderId, status, wait_time_minutes, delivered_by, delivered_by_id } = req.body ?? {}
   if (!orderId || (!status && wait_time_minutes == null)) {
     return res.status(400).json({ message: 'Missing orderId or update fields' })
   }
@@ -39,9 +41,15 @@ export default async function handler(req, res) {
   // Update the status
   const updates = { status }
   if (wait_time_minutes != null) updates.wait_time_minutes = parseInt(wait_time_minutes)
-  // Mark reminded_at when admin manually sets ready (prevents double auto-ready SMS)
   if (status === 'ready' && !order.reminded_at) {
     updates.reminded_at = new Date().toISOString()
+  }
+  if (status === 'delivered') {
+    updates.delivered_at    = new Date().toISOString()
+    if (delivered_by)    updates.delivered_by    = delivered_by
+    if (delivered_by_id) updates.delivered_by_id = delivered_by_id
+    // Generate a one-time review token so the SMS link is unique and expiring
+    updates.review_token = randomUUID()
   }
 
   const { error } = await supabase
@@ -66,10 +74,28 @@ export default async function handler(req, res) {
 
     const rawPhone = customer?.contact_phone || customer?.phone || order.contact_phone || order.momo_number
     if (rawPhone) {
-      const message = msgBuilder(order)
+      // For delivered status, pass the fresh review_token so it appears in the SMS link
+      const orderForSms = status === 'delivered' && updates.review_token
+        ? { ...order, review_token: updates.review_token }
+        : order
+      const message = msgBuilder(orderForSms)
       await sendSMS({ to: toInternational(rawPhone), message })
         .catch(err => console.error('[admin/update-order] SMS failed:', err.message))
     }
+  }
+
+  // Push notification to customer on key status changes
+  const PUSH_MESSAGES = {
+    preparing: { title: '👨‍🍳 We\'re cooking!',  body: 'Your order is being prepared now.' },
+    ready:     { title: '🎉 Order Ready!',        body: 'Your food is ready for pickup/delivery!' },
+    delivered: { title: '✅ Delivered!',           body: 'Your order has been delivered. Enjoy!' },
+    cancelled: { title: '❌ Order Cancelled',      body: 'Your order has been cancelled. Contact us if you have questions.' },
+    failed:    { title: '❌ Order Failed',         body: 'There was a problem with your order. Please contact us.' },
+  }
+  const pushMsg = PUSH_MESSAGES[status]
+  if (pushMsg) {
+    pushCustomer(orderId, { ...pushMsg, url: '/', tag: `status-${orderId}-${status}` })
+      .catch(() => {})
   }
 
   return res.status(200).json({ ok: true })
