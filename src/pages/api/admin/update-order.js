@@ -13,8 +13,19 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { orderId, status } = req.body ?? {}
-  if (!orderId || !status) return res.status(400).json({ message: 'Missing orderId or status' })
+  const { orderId, status, wait_time_minutes } = req.body ?? {}
+  if (!orderId || (!status && wait_time_minutes == null)) {
+    return res.status(400).json({ message: 'Missing orderId or update fields' })
+  }
+
+  // For wait_time_minutes-only updates we don't need SMS, skip the fetch
+  if (wait_time_minutes != null && !status) {
+    const mins = parseInt(wait_time_minutes)
+    if (!mins || mins < 1) return res.status(400).json({ message: 'Invalid wait_time_minutes' })
+    const { error } = await supabase.from('orders').update({ wait_time_minutes: mins }).eq('id', orderId)
+    if (error) return res.status(500).json({ message: error.message })
+    return res.status(200).json({ ok: true })
+  }
 
   // Fetch the full order so we can build the SMS
   const { data: order, error: fetchErr } = await supabase
@@ -27,6 +38,7 @@ export default async function handler(req, res) {
 
   // Update the status
   const updates = { status }
+  if (wait_time_minutes != null) updates.wait_time_minutes = parseInt(wait_time_minutes)
   // Mark reminded_at when admin manually sets ready (prevents double auto-ready SMS)
   if (status === 'ready' && !order.reminded_at) {
     updates.reminded_at = new Date().toISOString()

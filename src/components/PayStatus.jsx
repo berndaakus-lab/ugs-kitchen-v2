@@ -45,11 +45,13 @@ function CopyButton({ text }) {
 
 export default function PayStatus({ order, onDismiss }) {
   const waitSecs = (order?.wait_time_minutes ?? 30) * 60
-  const [remaining, setRemaining] = useState(waitSecs)
-  const [done,      setDone]      = useState(false)
+  const [remaining,    setRemaining]    = useState(waitSecs)
+  const [done,         setDone]         = useState(false)
+  const [knownWaitMin, setKnownWaitMin] = useState(order?.wait_time_minutes ?? 30)
 
   const newAccount = order?._newAccount?.isNew ? order._newAccount : null
 
+  // Countdown tick
   useEffect(() => {
     if (!order) return
     const fireAt = Date.now() + waitSecs * 1000
@@ -69,6 +71,26 @@ export default function PayStatus({ order, onDismiss }) {
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order])
+
+  // Poll for wait_time_minutes changes from admin
+  useEffect(() => {
+    if (!order?.id || done) return
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/order-status?orderId=${order.id}`)
+        if (!res.ok) return
+        const data = await res.json()
+        const newMins = data.wait_time_minutes
+        if (newMins && newMins > knownWaitMin) {
+          const addedSecs = (newMins - knownWaitMin) * 60
+          setRemaining(prev => prev + addedSecs)
+          setKnownWaitMin(newMins)
+        }
+      } catch {}
+    }, 30_000)
+    return () => clearInterval(poll)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.id, done, knownWaitMin])
 
   if (!order) return null
 
@@ -119,7 +141,7 @@ export default function PayStatus({ order, onDismiss }) {
             <div className="flex items-center gap-2 mt-3">
               <UtensilsCrossed size={15} className="text-brand-orange" />
               <p className="text-sm font-bold text-brand-dark">
-                Est. wait: {order.wait_time_minutes ?? 30} min
+                Est. wait: {knownWaitMin} min
               </p>
             </div>
             <p className="text-xs text-gray-400 mt-1 text-center">

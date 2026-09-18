@@ -368,7 +368,7 @@ function CategoryImageManager({ categories, onUpdate }) {
 }
 
 // ── Order Detail Modal ────────────────────────────────────────
-function OrderModal({ order, onClose, onStatusChange }) {
+function OrderModal({ order, onClose, onStatusChange, onAddTime }) {
   if (!order) return null
   const statusOptions = ['paid','preparing','ready','delivered','failed','cancelled']
 
@@ -390,7 +390,29 @@ function OrderModal({ order, onClose, onStatusChange }) {
         {/* Customer info */}
         <div className="bg-brand-cream rounded-2xl p-4 space-y-2 mb-4 text-sm">
           <Row label="Name"     value={order.customer_name} />
-          <Row label="Location" value={order.delivery_location} />
+          {(() => {
+            const parts = (order.delivery_location ?? '').split('\n')
+            const zone  = parts[0]
+            const link  = parts[1]
+            return (
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-gray-500 flex-shrink-0">Location</span>
+                <div className="text-right">
+                  <span className="font-semibold text-brand-dark">{zone}</span>
+                  {link && (
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-end gap-1 mt-1 text-xs font-bold text-blue-600 underline"
+                    >
+                      📍 Open in Google Maps
+                    </a>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
           <Row label="MoMo"     value={order.momo_number} />
           <Row label="Time"     value={`${formatDate(order.created_at)} · ${formatTime(order.created_at)}`} />
           <Row label="Total"    value={formatGHS(order.total_amount)} bold />
@@ -416,6 +438,26 @@ function OrderModal({ order, onClose, onStatusChange }) {
             </div>
           ))}
         </div>
+
+        {/* Bump wait time — only useful while order is still being prepared */}
+        {['paid', 'preparing'].includes(order.status) && onAddTime && (
+          <div className="mb-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+              Extend Wait Time <span className="text-gray-300 font-normal normal-case">(currently {order.wait_time_minutes ?? 30} min)</span>
+            </p>
+            <div className="flex gap-2">
+              {[5, 10, 15].map(mins => (
+                <button
+                  key={mins}
+                  onClick={() => onAddTime(order.id, mins)}
+                  className="flex-1 py-2 rounded-xl text-xs font-bold border-2 border-brand-orange text-brand-orange active:bg-orange-50 transition-colors"
+                >
+                  +{mins} min
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Update status */}
         <div>
@@ -1013,6 +1055,19 @@ export default function AdminPage() {
   async function handleStaffToggle(member) {
     await supabase.from('staff').update({ is_active: !member.is_active }).eq('id', member.id)
     fetchStaff()
+  }
+
+  async function handleAddTime(orderId, extraMinutes) {
+    const current = selectedOrder?.wait_time_minutes ?? 30
+    const newMins = current + extraMinutes
+    const res = await fetch('/api/admin/update-order', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ orderId, wait_time_minutes: newMins }),
+    })
+    if (!res.ok) return
+    setSelectedOrder(prev => prev ? { ...prev, wait_time_minutes: newMins } : null)
+    fetchOrders()
   }
 
   async function handleStatusChange(orderId, newStatus) {
@@ -1681,6 +1736,7 @@ export default function AdminPage() {
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
         onStatusChange={handleStatusChange}
+        onAddTime={handleAddTime}
       />
 
       {menuForm && (
