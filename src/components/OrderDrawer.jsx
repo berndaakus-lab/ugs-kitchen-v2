@@ -31,6 +31,9 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   const [loading, setLoading]     = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [toastError, setToastError]   = useState('')
+  const [otpState, setOtpState]   = useState(null) // { reference, orderId } when OTP needed
+  const [otp, setOtp]             = useState('')
+  const [otpLoading, setOtpLoading] = useState(false)
   const drawerRef                 = useRef(null)
 
   // Auto-fill name from logged-in session when drawer opens
@@ -117,7 +120,13 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       const result = await res.json()
       if (!res.ok) throw new Error(result.message || 'Payment initiation failed.')
 
-      // 3. Poll via Supabase Realtime AND directly via Paystack verify
+      // 3. If Paystack requires OTP, show input — otherwise poll for completion
+      if (result.requiresOtp) {
+        setLoading(false)
+        setOtpState({ reference: result.reference, orderId: order.id })
+        return
+      }
+
       pollOrderStatus(order.id, result.reference)
     } catch (err) {
       setToastError(err.message)
@@ -200,6 +209,30 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       setLoading(false)
       setToastError('Payment timed out. Check your phone and try again.')
     }, 180_000)
+  }
+
+  async function handleSubmitOtp() {
+    if (!otp.trim() || !otpState) return
+    setOtpLoading(true)
+    setToastError('')
+    try {
+      const res = await fetch('/api/submit-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otp: otp.trim(), reference: otpState.reference }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || 'OTP submission failed.')
+      // OTP accepted — now poll for payment confirmation
+      setOtpState(null)
+      setOtp('')
+      setLoading(true)
+      pollOrderStatus(otpState.orderId, otpState.reference)
+    } catch (err) {
+      setToastError(err.message)
+    } finally {
+      setOtpLoading(false)
+    }
   }
 
   if (!isOpen) return null
@@ -379,14 +412,45 @@ export default function OrderDrawer({ onPaymentSuccess }) {
 
         {/* CTA */}
         <div className="px-5 pb-6 pt-3 border-t border-gray-100">
-          {loading ? (
+          {otpState ? (
+            <div className="space-y-3">
+              <p className="font-bold text-brand-dark text-center text-sm">
+                Enter the code sent to your phone
+              </p>
+              <p className="text-xs text-gray-400 text-center">
+                Check your SMS for a code from MTN/Paystack
+              </p>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={otp}
+                onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                placeholder="Enter OTP code"
+                className="w-full border-2 border-brand-orange rounded-xl px-4 py-3 text-xl font-extrabold tracking-widest text-center outline-none"
+                autoFocus
+              />
+              <button
+                onClick={handleSubmitOtp}
+                disabled={otpLoading || otp.length < 4}
+                className="w-full bg-brand-brown text-white font-extrabold rounded-2xl py-4 text-lg active:bg-brand-dark transition-colors shadow-lg disabled:opacity-60"
+              >
+                {otpLoading ? 'Verifying…' : 'Confirm Payment'}
+              </button>
+              <button
+                onClick={() => { setOtpState(null); setOtp(''); setToastError('') }}
+                className="w-full text-gray-400 text-sm font-semibold py-1"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : loading ? (
             <div className="flex flex-col items-center gap-3 py-4">
               <Loader2 size={32} className="animate-spin text-brand-orange" />
               <p className="font-bold text-brand-dark text-center">
-                Check your phone for the payment prompt…
+                Confirming your payment…
               </p>
               <p className="text-xs text-gray-400 text-center">
-                Enter your MoMo PIN to complete the order.
+                Please wait while we verify your transaction.
               </p>
             </div>
           ) : (

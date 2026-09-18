@@ -68,10 +68,14 @@ export default async function handler(req, res) {
       .update({ paystack_reference: reference, status: 'awaiting_payment' })
       .eq('id', orderId)
 
+    const chargeStatus = data.data?.status
+    const requiresOtp  = chargeStatus === 'send_otp'
+
     return res.status(200).json({
-      success:   true,
+      success:     true,
       reference,
-      message:   data.data?.display_text || 'Payment prompt sent to your phone.',
+      requiresOtp,
+      message:     data.data?.display_text || 'Payment prompt sent to your phone.',
     })
   } catch (err) {
     const msg = err.response?.data?.message || err.message || 'Payment initiation failed.'
