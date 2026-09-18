@@ -222,6 +222,8 @@ create table if not exists orders (
   delivered_by         text,          -- name of the staff/delivery account that marked delivered
   delivered_by_id      uuid references staff(id) on delete set null,
   delivered_at         timestamptz,   -- when it was marked delivered
+  review_token         uuid unique,   -- one-time token for the post-delivery review link
+  review_token_used_at timestamptz,   -- set when customer submits review (blocks reuse)
   created_at           timestamptz default now()
 );
 
@@ -269,13 +271,14 @@ alter publication supabase_realtime add table orders;
 -- ─── REVIEWS ─────────────────────────────────────────────────
 create table if not exists reviews (
   id            bigserial primary key,
+  order_id      bigint references orders(id) on delete set null,
   customer_name text not null,
-  momo_number   text not null,           -- used for deduplication only, not shown publicly
+  momo_number   text not null,
   rating        int  not null check (rating between 1 and 5),
   comment       text,
   is_approved   boolean not null default true,
   created_at    timestamptz default now(),
-  unique (momo_number)                   -- one review per MoMo number
+  unique (order_id)                      -- one review per order (token enforces this)
 );
 
 alter table reviews enable row level security;

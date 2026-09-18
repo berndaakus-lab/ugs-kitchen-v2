@@ -3,7 +3,8 @@
 // Also sends the customer an SMS when status changes.
 
 import { createClient } from '@supabase/supabase-js'
-import { sendSMS, toInternational, STATUS_SMS } from '../../../lib/sms'
+import { createHash, randomUUID } from 'crypto'
+import { sendSMS, toInternational, STATUS_SMS, msgOrderDeliveredWithToken } from '../../../lib/sms'
 import { pushCustomer } from '../../../lib/push'
 
 const supabase = createClient(
@@ -47,6 +48,8 @@ export default async function handler(req, res) {
     updates.delivered_at    = new Date().toISOString()
     if (delivered_by)    updates.delivered_by    = delivered_by
     if (delivered_by_id) updates.delivered_by_id = delivered_by_id
+    // Generate a one-time review token so the SMS link is unique and expiring
+    updates.review_token = randomUUID()
   }
 
   const { error } = await supabase
@@ -71,7 +74,11 @@ export default async function handler(req, res) {
 
     const rawPhone = customer?.contact_phone || customer?.phone || order.contact_phone || order.momo_number
     if (rawPhone) {
-      const message = msgBuilder(order)
+      // For delivered status, pass the fresh review_token so it appears in the SMS link
+      const orderForSms = status === 'delivered' && updates.review_token
+        ? { ...order, review_token: updates.review_token }
+        : order
+      const message = msgBuilder(orderForSms)
       await sendSMS({ to: toInternational(rawPhone), message })
         .catch(err => console.error('[admin/update-order] SMS failed:', err.message))
     }
