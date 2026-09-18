@@ -34,6 +34,8 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   const [otpState, setOtpState]   = useState(null) // { reference, orderId } when OTP needed
   const [otp, setOtp]             = useState('')
   const [otpLoading, setOtpLoading] = useState(false)
+  const [gpsLoading, setGpsLoading] = useState(false)
+  const [gpsLink, setGpsLink]     = useState(null) // Google Maps URL when captured
   const drawerRef                 = useRef(null)
 
   // Auto-fill name from logged-in session when drawer opens
@@ -90,7 +92,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
         .from('orders')
         .insert({
           customer_name:      name.trim(),
-          delivery_location:  location,
+          delivery_location:  gpsLink ? `${location}\n${gpsLink}` : location,
           momo_number:        phone,
           contact_phone:      contactPhone,
           items:              items,
@@ -222,6 +224,24 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       setLoading(false)
       setToastError('Payment timed out. Check your phone and try again.')
     }, 180_000)
+  }
+
+  async function handleShareLocation() {
+    if (!navigator.geolocation) return
+    setGpsLoading(true)
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const { latitude, longitude } = pos.coords
+        const url = `https://maps.google.com/?q=${latitude},${longitude}`
+        setGpsLink(url)
+        setGpsLoading(false)
+      },
+      () => {
+        setGpsLoading(false)
+        alert('Could not get your location. Please allow location access and try again.')
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
   }
 
   async function handleSubmitOtp() {
@@ -378,6 +398,31 @@ export default function OrderDrawer({ onPaymentSuccess }) {
               </div>
               {fieldErrors.location && (
                 <p className="text-red-500 text-xs font-semibold mt-1 pl-1">{fieldErrors.location}</p>
+              )}
+              {/* GPS location share */}
+              {gpsLink ? (
+                <div className="mt-2 flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                  <span className="text-green-600 text-sm">📍</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-green-700">Location shared</p>
+                    <a href={gpsLink} target="_blank" rel="noreferrer" className="text-[11px] text-green-600 underline truncate block">View on Google Maps</a>
+                  </div>
+                  <button onClick={() => setGpsLink(null)} className="text-green-400 text-xs font-bold">✕</button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleShareLocation}
+                  disabled={gpsLoading}
+                  className="mt-2 w-full flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl py-2.5 text-sm font-semibold text-gray-500 active:bg-gray-50 disabled:opacity-60"
+                >
+                  {gpsLoading ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <span>📍</span>
+                  )}
+                  {gpsLoading ? 'Getting location…' : 'Share my exact location (optional)'}
+                </button>
               )}
             </div>
 

@@ -390,7 +390,29 @@ function OrderModal({ order, onClose, onStatusChange }) {
         {/* Customer info */}
         <div className="bg-brand-cream rounded-2xl p-4 space-y-2 mb-4 text-sm">
           <Row label="Name"     value={order.customer_name} />
-          <Row label="Location" value={order.delivery_location} />
+          {(() => {
+            const parts = (order.delivery_location ?? '').split('\n')
+            const zone  = parts[0]
+            const link  = parts[1]
+            return (
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-gray-500 flex-shrink-0">Location</span>
+                <div className="text-right">
+                  <span className="font-semibold text-brand-dark">{zone}</span>
+                  {link && (
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-end gap-1 mt-1 text-xs font-bold text-blue-600 underline"
+                    >
+                      📍 Open in Google Maps
+                    </a>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
           <Row label="MoMo"     value={order.momo_number} />
           <Row label="Time"     value={`${formatDate(order.created_at)} · ${formatTime(order.created_at)}`} />
           <Row label="Total"    value={formatGHS(order.total_amount)} bold />
