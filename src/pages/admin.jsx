@@ -828,6 +828,8 @@ export default function AdminPage() {
   // Export state
   const [exportOpen,    setExportOpen]    = useState(false)
   const [exporting,     setExporting]     = useState(false)
+  const [exportFrom,    setExportFrom]    = useState('')
+  const [exportTo,      setExportTo]      = useState('')
   const exportRef = useRef(null)
 
   // Close export dropdown on outside click
@@ -845,37 +847,46 @@ export default function AdminPage() {
 
     const branchLabel = branches.find(b => b.id === (currentUser?.branch_id || branchFilter))?.name ?? ''
 
-    if (type === 'day') {
-      // Use already-loaded orders (already filtered by date + branch)
-      const rows = ordersToRows(orders, branchLabel)
-      if (!rows.length) { alert('No orders for this day.'); setExporting(false); return }
-      downloadExcel(rows, `UGs_Orders_${selectedDate}.xlsx`)
-    } else {
-      // Monthly: fetch full month
-      const [y, m] = selectedDate.split('-')
-      const start  = `${y}-${m}-01T00:00:00`
-      const lastDay = new Date(y, m, 0).getDate()
-      const end    = `${y}-${m}-${String(lastDay).padStart(2,'0')}T23:59:59`
-
+    async function fetchRange(start, end) {
       let query = supabase
         .from('orders')
         .select('*')
-        .gte('created_at', start)
-        .lte('created_at', end)
         .order('created_at', { ascending: false })
-
+      if (start) query = query.gte('created_at', start)
+      if (end)   query = query.lte('created_at', end)
       const staffBranch = currentUser?.branch_id
-      if (staffBranch) {
-        query = query.eq('branch_id', staffBranch)
-      } else if (branchFilter !== 'all') {
-        query = query.eq('branch_id', branchFilter)
-      }
-
+      if (staffBranch) query = query.eq('branch_id', staffBranch)
+      else if (branchFilter !== 'all') query = query.eq('branch_id', branchFilter)
       const { data } = await query
-      const rows = ordersToRows(data ?? [], branchLabel)
+      return data ?? []
+    }
+
+    if (type === 'day') {
+      const rows = ordersToRows(orders, branchLabel)
+      if (!rows.length) { alert('No orders for this day.'); setExporting(false); return }
+      downloadExcel(rows, `UGs_Orders_${selectedDate}.xlsx`)
+
+    } else if (type === 'month') {
+      const [y, m] = selectedDate.split('-')
+      const lastDay = new Date(y, m, 0).getDate()
+      const data = await fetchRange(`${y}-${m}-01T00:00:00Z`, `${y}-${m}-${String(lastDay).padStart(2,'0')}T23:59:59Z`)
+      const rows = ordersToRows(data, branchLabel)
       if (!rows.length) { alert('No orders for this month.'); setExporting(false); return }
-      const monthLabel = new Date(`${y}-${m}-01`).toLocaleDateString('en-GH', { month: 'long', year: 'numeric' })
       downloadExcel(rows, `UGs_Orders_${y}-${m}.xlsx`)
+
+    } else if (type === 'range') {
+      if (!exportFrom || !exportTo) { alert('Please select both a start and end date.'); setExporting(false); return }
+      if (exportFrom > exportTo)    { alert('Start date must be before end date.');      setExporting(false); return }
+      const data = await fetchRange(`${exportFrom}T00:00:00Z`, `${exportTo}T23:59:59Z`)
+      const rows = ordersToRows(data, branchLabel)
+      if (!rows.length) { alert('No orders in this date range.'); setExporting(false); return }
+      downloadExcel(rows, `UGs_Orders_${exportFrom}_to_${exportTo}.xlsx`)
+
+    } else if (type === 'all') {
+      const data = await fetchRange(null, null)
+      const rows = ordersToRows(data, branchLabel)
+      if (!rows.length) { alert('No orders found.'); setExporting(false); return }
+      downloadExcel(rows, `UGs_Orders_ALL.xlsx`)
     }
 
     setExporting(false)
@@ -1313,11 +1324,12 @@ export default function AdminPage() {
                 </button>
 
                 {exportOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-2xl shadow-xl border border-brand-muted z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-brand-muted z-50 overflow-hidden">
                     <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 px-4 pt-3 pb-1">Export as Excel</p>
+
                     <button
                       onClick={() => handleExport('day')}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
                     >
                       <CalendarDays size={16} className="text-brand-orange flex-shrink-0" />
                       <div className="text-left">
@@ -1325,10 +1337,11 @@ export default function AdminPage() {
                         <p className="text-xs text-gray-400">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                       </div>
                     </button>
+
                     <div className="border-t border-gray-100" />
                     <button
                       onClick={() => handleExport('month')}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
                     >
                       <Calendar size={16} className="text-brand-orange flex-shrink-0" />
                       <div className="text-left">
@@ -1336,9 +1349,51 @@ export default function AdminPage() {
                         <p className="text-xs text-gray-400">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GH', { month: 'long', year: 'numeric' })}</p>
                       </div>
                     </button>
+
+                    <div className="border-t border-gray-100" />
+                    {/* Custom date range */}
+                    <div className="px-4 py-3 space-y-2">
+                      <p className="text-xs font-bold text-brand-dark flex items-center gap-1.5">
+                        <FileSpreadsheet size={14} className="text-brand-orange" /> Custom Date Range
+                      </p>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="date"
+                          value={exportFrom}
+                          onChange={e => setExportFrom(e.target.value)}
+                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-brand-orange"
+                        />
+                        <span className="text-xs text-gray-400 flex-shrink-0">to</span>
+                        <input
+                          type="date"
+                          value={exportTo}
+                          onChange={e => setExportTo(e.target.value)}
+                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-brand-orange"
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleExport('range')}
+                        className="w-full bg-brand-orange text-white text-xs font-extrabold rounded-lg py-2 active:bg-brand-brown transition-colors"
+                      >
+                        Download Range
+                      </button>
+                    </div>
+
+                    <div className="border-t border-gray-100" />
+                    <button
+                      onClick={() => handleExport('all')}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-brand-dark hover:bg-brand-cream active:bg-brand-cream transition-colors"
+                    >
+                      <Download size={16} className="text-brand-orange flex-shrink-0" />
+                      <div className="text-left">
+                        <p className="font-bold">All Orders</p>
+                        <p className="text-xs text-gray-400">Every order ever — no date filter</p>
+                      </div>
+                    </button>
+
                     <div className="border-t border-gray-100" />
                     <p className="text-[10px] text-gray-400 px-4 py-2 leading-relaxed">
-                      Downloads an .xlsx file you can open in Excel or Google Sheets.
+                      Downloads an .xlsx file for Excel or Google Sheets.
                     </p>
                   </div>
                 )}
