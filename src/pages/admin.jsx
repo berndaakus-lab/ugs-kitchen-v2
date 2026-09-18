@@ -368,7 +368,7 @@ function CategoryImageManager({ categories, onUpdate }) {
 }
 
 // ── Order Detail Modal ────────────────────────────────────────
-function OrderModal({ order, onClose, onStatusChange }) {
+function OrderModal({ order, onClose, onStatusChange, onAddTime }) {
   if (!order) return null
   const statusOptions = ['paid','preparing','ready','delivered','failed','cancelled']
 
@@ -438,6 +438,26 @@ function OrderModal({ order, onClose, onStatusChange }) {
             </div>
           ))}
         </div>
+
+        {/* Bump wait time — only useful while order is still being prepared */}
+        {['paid', 'preparing'].includes(order.status) && onAddTime && (
+          <div className="mb-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+              Extend Wait Time <span className="text-gray-300 font-normal normal-case">(currently {order.wait_time_minutes ?? 30} min)</span>
+            </p>
+            <div className="flex gap-2">
+              {[5, 10, 15].map(mins => (
+                <button
+                  key={mins}
+                  onClick={() => onAddTime(order.id, mins)}
+                  className="flex-1 py-2 rounded-xl text-xs font-bold border-2 border-brand-orange text-brand-orange active:bg-orange-50 transition-colors"
+                >
+                  +{mins} min
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Update status */}
         <div>
@@ -1035,6 +1055,19 @@ export default function AdminPage() {
   async function handleStaffToggle(member) {
     await supabase.from('staff').update({ is_active: !member.is_active }).eq('id', member.id)
     fetchStaff()
+  }
+
+  async function handleAddTime(orderId, extraMinutes) {
+    const current = selectedOrder?.wait_time_minutes ?? 30
+    const newMins = current + extraMinutes
+    const res = await fetch('/api/admin/update-order', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ orderId, wait_time_minutes: newMins }),
+    })
+    if (!res.ok) return
+    setSelectedOrder(prev => prev ? { ...prev, wait_time_minutes: newMins } : null)
+    fetchOrders()
   }
 
   async function handleStatusChange(orderId, newStatus) {
@@ -1703,6 +1736,7 @@ export default function AdminPage() {
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
         onStatusChange={handleStatusChange}
+        onAddTime={handleAddTime}
       />
 
       {menuForm && (
