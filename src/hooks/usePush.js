@@ -39,10 +39,11 @@ async function subscribe(role, orderId) {
   }
 }
 
-export function useAdminPush() {
+// enabled: only subscribe once the user is logged in
+export function useAdminPush(enabled) {
   useEffect(() => {
-    subscribe('admin', null)
-  }, [])
+    if (enabled) subscribe('admin', null)
+  }, [enabled])
 }
 
 export function useCustomerPush(orderId) {

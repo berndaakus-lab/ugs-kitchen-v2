@@ -782,8 +782,9 @@ function StaffFormModal({ item, branches, onSave, onClose, saving }) {
 
 // ── Main Admin Dashboard ──────────────────────────────────────
 export default function AdminPage() {
-  useAdminPush()
   const [currentUser,    setCurrentUser]    = useState(null)   // { role, name }
+  // Subscribe for push after login — works for both admin and staff roles
+  useAdminPush(!!currentUser)
   const [activeTab,      setActiveTab]      = useState('orders')
   const [orders,         setOrders]         = useState([])
   const [loading,        setLoading]        = useState(true)
