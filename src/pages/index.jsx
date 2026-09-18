@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import MenuGrid from '../components/MenuGrid'
 import OrderDrawer from '../components/OrderDrawer'
 import PayStatus from '../components/PayStatus'
+import ReviewSection from '../components/ReviewSection'
 import BranchSelector from '../components/BranchSelector'
 import AuthModal from '../components/AuthModal'
 import Footer from '../components/Footer'
@@ -227,6 +228,8 @@ export default function Home() {
             loading={loading || branchLoading}
           />
         </main>
+
+        <ReviewSection />
 
         <Footer />
       </div>
