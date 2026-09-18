@@ -152,14 +152,25 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       onPaymentSuccess({ ...orderData, _newAccount: accountInfo })
     }
 
-    function handleFailed() {
+    function handleFailed(reason) {
       if (resolved) return
       resolved = true
       channel.unsubscribe()
       clearInterval(pollInterval)
       clearTimeout(timeoutId)
       setLoading(false)
-      setToastError('Payment failed or was declined. Please try again.')
+      const r = (reason ?? '').toLowerCase()
+      let msg = 'Payment failed. Please try again.'
+      if (r.includes('insufficient') || r.includes('balance') || r.includes('funds')) {
+        msg = 'Insufficient MoMo balance. Please top up and try again.'
+      } else if (r.includes('declined') || r.includes('unable to perform') || r.includes('invalid')) {
+        msg = 'Payment declined by MTN. Please check your MoMo balance and try again.'
+      } else if (r.includes('timeout') || r.includes('expired')) {
+        msg = 'Payment timed out. Please try again.'
+      } else if (r.includes('cancel')) {
+        msg = 'Payment was cancelled. Try again when ready.'
+      }
+      setToastError(msg)
     }
 
     // Layer 1 — Supabase Realtime (fires instantly when webhook updates the DB)
@@ -185,7 +196,6 @@ export default function OrderDrawer({ onPaymentSuccess }) {
         )
         const data = await res.json()
         if (data.status === 'paid') {
-          // Fetch the full order row to pass to success screen
           const { data: order } = await supabase
             .from('orders')
             .select('*')
@@ -193,7 +203,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
             .single()
           handleSuccess(order)
         } else if (data.status === 'failed') {
-          handleFailed()
+          handleFailed(data.reason)
         }
       } catch {
         // Silent — keep polling
