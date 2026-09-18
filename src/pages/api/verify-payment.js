@@ -56,7 +56,8 @@ export default async function handler(req, res) {
         .update({ status: 'failed' })
         .eq('id', orderId)
 
-      return res.status(200).json({ status: 'failed' })
+      const gatewayResponse = paystackRes?.data?.gateway_response ?? ''
+      return res.status(200).json({ status: 'failed', reason: gatewayResponse })
     }
 
     // still pending / pay_offline / charge_attempted — keep waiting

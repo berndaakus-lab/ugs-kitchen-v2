@@ -141,25 +141,32 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       if (resolved) return
       resolved = true
       channel.unsubscribe()
-      clearInterval(pollInterval)
       clearTimeout(timeoutId)
       setLoading(false)
-      // Silently create/link customer account; capture new-account credentials
       const accountInfo = await silentSignIn(orderData.customer_name, orderData.momo_number)
       clearCart()
       closeDrawer()
-      // Attach account info so PayStatus can show credentials for new accounts
       onPaymentSuccess({ ...orderData, _newAccount: accountInfo })
     }
 
-    function handleFailed() {
+    function handleFailed(reason) {
       if (resolved) return
       resolved = true
       channel.unsubscribe()
-      clearInterval(pollInterval)
       clearTimeout(timeoutId)
       setLoading(false)
-      setToastError('Payment failed or was declined. Please try again.')
+      const r = (reason ?? '').toLowerCase()
+      let msg = 'Payment failed. Please try again.'
+      if (r.includes('insufficient') || r.includes('balance') || r.includes('funds')) {
+        msg = 'Insufficient MoMo balance. Please top up and try again.'
+      } else if (r.includes('declined') || r.includes('unable to perform') || r.includes('invalid')) {
+        msg = 'Payment declined by MTN. Please check your MoMo balance and try again.'
+      } else if (r.includes('timeout') || r.includes('expired')) {
+        msg = 'Payment timed out. Please try again.'
+      } else if (r.includes('cancel')) {
+        msg = 'Payment was cancelled. Try again when ready.'
+      }
+      setToastError(msg)
     }
 
     // Layer 1 — Supabase Realtime (fires instantly when webhook updates the DB)
@@ -176,16 +183,17 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       )
       .subscribe()
 
-    // Layer 2 — Direct Paystack verify polling every 5s (covers test mode + webhook delays)
-    const pollInterval = setInterval(async () => {
+    // Layer 2 — Direct Paystack verify polling (fast at first, then slower)
+    let pollCount = 0
+    async function doPoll() {
       if (resolved || !reference) return
+      pollCount++
       try {
         const res = await fetch(
           `/api/verify-payment?reference=${reference}&orderId=${orderId}`
         )
         const data = await res.json()
         if (data.status === 'paid') {
-          // Fetch the full order row to pass to success screen
           const { data: order } = await supabase
             .from('orders')
             .select('*')
@@ -193,12 +201,17 @@ export default function OrderDrawer({ onPaymentSuccess }) {
             .single()
           handleSuccess(order)
         } else if (data.status === 'failed') {
-          handleFailed()
+          handleFailed(data.reason)
+        } else if (!resolved) {
+          // Poll every 2s for first 10 attempts, then every 5s
+          setTimeout(doPoll, pollCount < 10 ? 2000 : 5000)
         }
       } catch {
-        // Silent — keep polling
+        if (!resolved) setTimeout(doPoll, 3000)
       }
-    }, 5000)
+    }
+    const pollInterval = { cancel: () => { resolved = true } }
+    setTimeout(doPoll, 2000) // first check after 2s
 
     // Layer 3 — Hard timeout after 3 minutes
     const timeoutId = setTimeout(() => {
