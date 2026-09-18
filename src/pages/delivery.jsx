@@ -197,10 +197,14 @@ export default function DeliveryPage() {
   useAdminPush(!!currentUser)
 
   const fetchOrders = useCallback(async () => {
+    // Always today in GMT — clears at midnight GMT
+    const todayGMT = new Date().toISOString().split('T')[0]
     const { data } = await supabase
       .from('orders')
       .select('id, customer_name, delivery_location, items, total_amount, notes, status, created_at')
       .in('status', DELIVERY_STATUSES)
+      .gte('created_at', `${todayGMT}T00:00:00Z`)
+      .lte('created_at', `${todayGMT}T23:59:59Z`)
       .order('created_at', { ascending: true })
     setOrders(data ?? [])
     setLoading(false)

@@ -745,24 +745,31 @@ function StaffFormModal({ item, branches, onSave, onClose, saving }) {
 
           <div>
             <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Role *</label>
-            <div className="flex gap-3">
-              {['staff', 'admin'].map(r => (
+            <div className="flex gap-2">
+              {[
+                { value: 'staff',    label: '👨‍🍳 Kitchen',  color: 'border-blue-400 bg-blue-50 text-blue-600' },
+                { value: 'delivery', label: '🛵 Delivery',   color: 'border-green-500 bg-green-50 text-green-700' },
+                { value: 'admin',    label: '🛡 Admin',      color: 'border-brand-orange bg-orange-50 text-brand-orange' },
+              ].map(({ value, label, color }) => (
                 <button
-                  key={r}
+                  key={value}
                   type="button"
-                  onClick={() => set('role', r)}
-                  className={`flex-1 py-2.5 rounded-xl font-bold text-sm border-2 transition-colors
-                    ${form.role === r
-                      ? r === 'admin' ? 'border-brand-orange bg-orange-50 text-brand-orange' : 'border-blue-400 bg-blue-50 text-blue-600'
-                      : 'border-gray-200 bg-white text-gray-500'}`}
+                  onClick={() => set('role', value)}
+                  className={`flex-1 py-2.5 rounded-xl font-bold text-xs border-2 transition-colors
+                    ${form.role === value ? color : 'border-gray-200 bg-white text-gray-500'}`}
                 >
-                  {r === 'admin' ? '🛡 Admin' : '👨‍🍳 Kitchen Staff'}
+                  {label}
                 </button>
               ))}
             </div>
             {form.role === 'admin' && (
               <p className="text-[11px] text-brand-orange font-semibold mt-2">
                 ⚠️ Admin can access all tabs including Menu, Reviews, and Staff management.
+              </p>
+            )}
+            {form.role === 'delivery' && (
+              <p className="text-[11px] text-green-700 font-semibold mt-2">
+                🛵 Delivery accounts log in at /delivery — they only see active delivery orders.
               </p>
             )}
           </div>
@@ -881,10 +888,18 @@ export default function AdminPage() {
       .then(({ data }) => setBranches(data ?? []))
   }, [currentUser])
 
+  // Staff and delivery can only see today (GMT). Admin sees the selected date.
+  const isStaffOrDelivery = currentUser?.role === 'staff' || currentUser?.role === 'delivery'
+  const todayGMT = new Date().toISOString().split('T')[0]
+  const activeDate = isStaffOrDelivery ? todayGMT : selectedDate
+
   const fetchOrders = useCallback(async () => {
     setRefreshing(true)
-    const start = `${selectedDate}T00:00:00`
-    const end   = `${selectedDate}T23:59:59`
+    const date  = (currentUser?.role === 'staff' || currentUser?.role === 'delivery')
+      ? new Date().toISOString().split('T')[0]
+      : selectedDate
+    const start = `${date}T00:00:00Z`
+    const end   = `${date}T23:59:59Z`
 
     let query = supabase
       .from('orders')
@@ -1256,21 +1271,30 @@ export default function AdminPage() {
 
           {/* Date picker + Export */}
           <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 font-semibold text-sm outline-none focus:border-brand-orange appearance-none bg-white"
-              />
-            </div>
-            {!isToday && (
-              <button
-                onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-                className="px-3 py-2.5 bg-brand-brown text-white text-sm font-bold rounded-xl flex-shrink-0"
-              >
-                Today
-              </button>
+            {/* Staff and delivery are locked to today — hide the date picker */}
+            {isStaffOrDelivery ? (
+              <div className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-2.5 bg-gray-50 text-sm font-semibold text-gray-500 text-center">
+                📅 Today only
+              </div>
+            ) : (
+              <>
+                <div className="relative flex-1">
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={e => setSelectedDate(e.target.value)}
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 font-semibold text-sm outline-none focus:border-brand-orange appearance-none bg-white"
+                  />
+                </div>
+                {!isToday && (
+                  <button
+                    onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                    className="px-3 py-2.5 bg-brand-brown text-white text-sm font-bold rounded-xl flex-shrink-0"
+                  >
+                    Today
+                  </button>
+                )}
+              </>
             )}
             {/* Export button — admin only */}
             {isAdmin && (
@@ -1665,15 +1689,15 @@ export default function AdminPage() {
                       <div className="flex items-center gap-3">
                         {/* Avatar */}
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-extrabold text-sm
-                          ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : 'bg-blue-50 text-blue-600'}`}>
+                          ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : member.role === 'delivery' ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
                           {member.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-bold text-brand-dark text-sm">{member.name}</p>
                             <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full
-                              ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : 'bg-blue-50 text-blue-600'}`}>
-                              {member.role === 'admin' ? '🛡 Admin' : '👨‍🍳 Staff'}
+                              ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : member.role === 'delivery' ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
+                              {member.role === 'admin' ? '🛡 Admin' : member.role === 'delivery' ? '🛵 Delivery' : '👨‍🍳 Staff'}
                             </span>
                             {!member.is_active && (
                               <span className="text-[10px] font-bold bg-red-50 text-red-400 px-2 py-0.5 rounded-full">Disabled</span>
