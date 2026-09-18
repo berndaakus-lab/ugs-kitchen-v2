@@ -158,7 +158,7 @@ export default function ReviewPage() {
           iconBg="bg-gray-100"
           icon={<Clock size={44} className="text-gray-400" />}
           title="Review Link Expired"
-          body="This review link is more than 7 days old and has expired. Review links are sent by SMS when your order is delivered."
+          body="This review link has expired (valid for 24 hours after delivery). Review links are sent by SMS when your order is delivered."
           action={
             <Link href="/" className="block w-full bg-brand-brown text-white font-extrabold rounded-2xl py-4 text-base active:bg-brand-dark transition-colors">
               Go to UGs Kitchen
@@ -254,7 +254,7 @@ export default function ReviewPage() {
             </button>
 
             <p className="text-[11px] text-gray-400 text-center">
-              This link is unique to your order and can only be used once.
+              This link is unique to your order, valid for 24 hours, and can only be used once.
             </p>
           </form>
         </div>

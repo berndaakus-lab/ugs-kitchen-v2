@@ -129,7 +129,7 @@ export function msgOrderDelivered(order) {
     : null
   return (
     `Hi ${order.customer_name}! ✅ Your UGs Kitchen order has been delivered. Enjoy your meal!\n` +
-    (reviewLink ? `Leave us a review (link expires in 7 days): ${reviewLink}\n` : '') +
+    (reviewLink ? `Leave us a review (link expires in 24 hours): ${reviewLink}\n` : '') +
     `Thank you for choosing UGs Kitchen! 🍽️`
   )
 }
