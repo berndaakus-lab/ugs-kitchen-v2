@@ -387,7 +387,11 @@ export default function OrderDrawer({ onPaymentSuccess }) {
                   className={`w-full border-2 rounded-xl px-4 py-3 text-base font-semibold outline-none focus:border-brand-orange appearance-none bg-white transition-colors ${fieldErrors.location ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
                 >
                   <option value="">Select location…</option>
-                  {deliveryLocations.map(loc => (
+                  {[...deliveryLocations].sort((a, b) => {
+                    const aPickup = a.toLowerCase().includes('pick')
+                    const bPickup = b.toLowerCase().includes('pick')
+                    return aPickup === bPickup ? 0 : aPickup ? -1 : 1
+                  }).map(loc => (
                     <option key={loc} value={loc}>{loc}</option>
                   ))}
                 </select>
