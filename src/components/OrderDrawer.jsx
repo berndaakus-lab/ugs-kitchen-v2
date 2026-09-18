@@ -141,14 +141,11 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       if (resolved) return
       resolved = true
       channel.unsubscribe()
-      clearInterval(pollInterval)
       clearTimeout(timeoutId)
       setLoading(false)
-      // Silently create/link customer account; capture new-account credentials
       const accountInfo = await silentSignIn(orderData.customer_name, orderData.momo_number)
       clearCart()
       closeDrawer()
-      // Attach account info so PayStatus can show credentials for new accounts
       onPaymentSuccess({ ...orderData, _newAccount: accountInfo })
     }
 
@@ -156,7 +153,6 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       if (resolved) return
       resolved = true
       channel.unsubscribe()
-      clearInterval(pollInterval)
       clearTimeout(timeoutId)
       setLoading(false)
       const r = (reason ?? '').toLowerCase()
@@ -187,9 +183,11 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       )
       .subscribe()
 
-    // Layer 2 — Direct Paystack verify polling every 5s (covers test mode + webhook delays)
-    const pollInterval = setInterval(async () => {
+    // Layer 2 — Direct Paystack verify polling (fast at first, then slower)
+    let pollCount = 0
+    async function doPoll() {
       if (resolved || !reference) return
+      pollCount++
       try {
         const res = await fetch(
           `/api/verify-payment?reference=${reference}&orderId=${orderId}`
@@ -204,11 +202,16 @@ export default function OrderDrawer({ onPaymentSuccess }) {
           handleSuccess(order)
         } else if (data.status === 'failed') {
           handleFailed(data.reason)
+        } else if (!resolved) {
+          // Poll every 2s for first 10 attempts, then every 5s
+          setTimeout(doPoll, pollCount < 10 ? 2000 : 5000)
         }
       } catch {
-        // Silent — keep polling
+        if (!resolved) setTimeout(doPoll, 3000)
       }
-    }, 5000)
+    }
+    const pollInterval = { cancel: () => { resolved = true } }
+    setTimeout(doPoll, 2000) // first check after 2s
 
     // Layer 3 — Hard timeout after 3 minutes
     const timeoutId = setTimeout(() => {
