@@ -219,6 +219,9 @@ create table if not exists orders (
   notes                text,
   reminded_at          timestamptz,   -- set when 30-min reminder SMS is sent (prevents duplicates)
   wait_time_minutes    int,           -- estimated prep time stored at order time
+  delivered_by         text,          -- name of the staff/delivery account that marked delivered
+  delivered_by_id      uuid references staff(id) on delete set null,
+  delivered_at         timestamptz,   -- when it was marked delivered
   created_at           timestamptz default now()
 );
 

@@ -60,6 +60,8 @@ function ordersToRows(orders, branchName = '') {
     'Status':        o.status,
     'Channel':       o.payment_channel ?? '',
     'Branch':        branchName || o.branch_id || '',
+    'Delivered By':  o.delivered_by ?? '',
+    'Delivered At':  o.delivered_at ? new Date(o.delivered_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' }) : '',
     'Notes':         o.notes ?? '',
   }))
 }
@@ -416,6 +418,9 @@ function OrderModal({ order, onClose, onStatusChange, onAddTime }) {
           <Row label="MoMo"     value={order.momo_number} />
           <Row label="Time"     value={`${formatDate(order.created_at)} · ${formatTime(order.created_at)}`} />
           <Row label="Total"    value={formatGHS(order.total_amount)} bold />
+          {order.delivered_by && (
+            <Row label="Delivered by" value={`${order.delivered_by}${order.delivered_at ? ' · ' + formatTime(order.delivered_at) : ''}`} />
+          )}
         </div>
 
         {/* Special instructions */}

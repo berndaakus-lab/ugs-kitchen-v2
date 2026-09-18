@@ -42,7 +42,7 @@ function LoginScreen({ onLogin }) {
     if (!data.is_active) { setError('Account is disabled.'); setPin(''); return }
     if (data.pin !== pin) { setError('Wrong PIN.'); setPin(''); return }
 
-    onLogin({ role: data.role, name: data.name, branch_id: data.branch_id ?? null })
+    onLogin({ id: data.id, role: data.role, name: data.name, branch_id: data.branch_id ?? null })
   }
 
   return (
@@ -228,7 +228,12 @@ export default function DeliveryPage() {
     await fetch('/api/admin/update-order', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ orderId, status: 'delivered' }),
+      body:    JSON.stringify({
+        orderId,
+        status:          'delivered',
+        delivered_by:    currentUser.name,
+        delivered_by_id: currentUser.id,
+      }),
     })
     setDelivering(null)
     fetchOrders()
