@@ -78,6 +78,8 @@ export default async function handler(req, res) {
     preparing: { title: '👨‍🍳 We\'re cooking!',  body: 'Your order is being prepared now.' },
     ready:     { title: '🎉 Order Ready!',        body: 'Your food is ready for pickup/delivery!' },
     delivered: { title: '✅ Delivered!',           body: 'Your order has been delivered. Enjoy!' },
+    cancelled: { title: '❌ Order Cancelled',      body: 'Your order has been cancelled. Contact us if you have questions.' },
+    failed:    { title: '❌ Order Failed',         body: 'There was a problem with your order. Please contact us.' },
   }
   const pushMsg = PUSH_MESSAGES[status]
   if (pushMsg) {

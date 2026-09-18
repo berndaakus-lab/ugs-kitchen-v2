@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
-import { sendSMSClient, smsPhone, STATUS_SMS } from '../lib/sms'
 import { useAdminPush } from '../hooks/usePush'
 import {
   ShoppingBag, Clock, XCircle,
@@ -1085,16 +1084,7 @@ export default function AdminPage() {
       return
     }
 
-    // SMS the customer on key status changes
-    const updatedOrder = { ...selectedOrder, status: newStatus }
-    const msgBuilder = STATUS_SMS[newStatus]
-    if (msgBuilder && smsPhone(updatedOrder)) {
-      sendSMSClient({
-        to:      smsPhone(updatedOrder),
-        message: msgBuilder(updatedOrder),
-      })
-    }
-
+    // SMS + push are sent server-side in update-order.js — nothing extra needed here
     setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null)
     fetchOrders()
   }
