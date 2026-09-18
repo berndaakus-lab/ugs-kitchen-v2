@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { sendSMSClient, smsPhone, STATUS_SMS } from '../lib/sms'
+import { useAdminPush } from '../hooks/usePush'
 import {
   ShoppingBag, Clock, XCircle,
   TrendingUp, RefreshCw, LogOut, Eye,
@@ -782,6 +783,7 @@ function StaffFormModal({ item, branches, onSave, onClose, saving }) {
 
 // ── Main Admin Dashboard ──────────────────────────────────────
 export default function AdminPage() {
+  useAdminPush()
   const [currentUser,    setCurrentUser]    = useState(null)   // { role, name }
   const [activeTab,      setActiveTab]      = useState('orders')
   const [orders,         setOrders]         = useState([])

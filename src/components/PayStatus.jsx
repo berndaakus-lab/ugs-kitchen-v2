@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, UtensilsCrossed, Clock, Copy, Check, LogIn } from 'lucide-react'
 import Link from 'next/link'
+import { useCustomerPush } from '../hooks/usePush'
 
 const REMINDER_KEY = 'ugs_reminder'
 
@@ -48,6 +49,8 @@ export default function PayStatus({ order, onDismiss }) {
   const [remaining,    setRemaining]    = useState(waitSecs)
   const [done,         setDone]         = useState(false)
   const [knownWaitMin, setKnownWaitMin] = useState(order?.wait_time_minutes ?? 30)
+
+  useCustomerPush(order?.id)
 
   const newAccount = order?._newAccount?.isNew ? order._newAccount : null
 

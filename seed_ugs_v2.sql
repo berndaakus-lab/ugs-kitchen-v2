@@ -29,6 +29,7 @@
 -- ============================================================
 
 -- ─── DROP EXISTING TABLES (order matters due to foreign keys) ─
+drop table if exists push_subscriptions cascade;
 drop table if exists reviews    cascade;
 drop table if exists orders     cascade;
 drop table if exists menu_items cascade;
@@ -286,6 +287,18 @@ create policy "Service role can manage reviews"
   on reviews for all using (auth.role() = 'service_role');
 
 alter publication supabase_realtime add table reviews;
+
+-- ─── PUSH SUBSCRIPTIONS ──────────────────────────────────────
+
+create table if not exists push_subscriptions (
+  id         uuid        primary key default gen_random_uuid(),
+  endpoint   text        unique not null,
+  p256dh     text        not null,
+  auth       text        not null,
+  role       text        not null default 'customer' check (role in ('admin', 'customer')),
+  order_id   bigint      references orders(id) on delete cascade,
+  created_at timestamptz default now()
+);
 
 -- ─── SEED DATA ───────────────────────────────────────────────
 

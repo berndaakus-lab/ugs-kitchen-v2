@@ -4,6 +4,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { sendSMS, toInternational, STATUS_SMS } from '../../../lib/sms'
+import { pushCustomer } from '../../../lib/push'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -70,6 +71,18 @@ export default async function handler(req, res) {
       await sendSMS({ to: toInternational(rawPhone), message })
         .catch(err => console.error('[admin/update-order] SMS failed:', err.message))
     }
+  }
+
+  // Push notification to customer on key status changes
+  const PUSH_MESSAGES = {
+    preparing: { title: '👨‍🍳 We\'re cooking!',  body: 'Your order is being prepared now.' },
+    ready:     { title: '🎉 Order Ready!',        body: 'Your food is ready for pickup/delivery!' },
+    delivered: { title: '✅ Delivered!',           body: 'Your order has been delivered. Enjoy!' },
+  }
+  const pushMsg = PUSH_MESSAGES[status]
+  if (pushMsg) {
+    pushCustomer(orderId, { ...pushMsg, url: '/', tag: `status-${orderId}-${status}` })
+      .catch(() => {})
   }
 
   return res.status(200).json({ ok: true })
