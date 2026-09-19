@@ -1286,7 +1286,7 @@ export default function AdminPage() {
               className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
                 ${activeTab === 'promos' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
             >
-              <Tag size={15} /> Promos
+              <Tag size={15} className="text-yellow-400" /> Promos
             </button>
           )}
         </div>
@@ -2003,7 +2003,7 @@ export default function AdminPage() {
                 </div>
               ) : promos.length === 0 ? (
                 <div className="text-center py-16">
-                  <Tag size={40} className="text-gray-200 mx-auto mb-3" />
+                  <Tag size={40} className="text-yellow-200 mx-auto mb-3" />
                   <p className="text-gray-400 font-semibold">No promos yet</p>
                   <p className="text-gray-400 text-xs mt-1">Create one to show a banner to customers</p>
                 </div>
