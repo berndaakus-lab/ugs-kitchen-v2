@@ -9,7 +9,7 @@ import {
   TrendingUp, RefreshCw, LogOut, Eye,
   Star, CheckCircle2, Trash2, MessageSquare,
   UtensilsCrossed, Plus, Pencil, ChevronLeft, ChevronRight, X, ToggleLeft, ToggleRight,
-  Users, ShieldCheck, ShieldOff, Download, FileSpreadsheet, CalendarDays, Calendar
+  Users, ShieldCheck, ShieldOff, Download, FileSpreadsheet, CalendarDays, Calendar, Tag
 } from 'lucide-react'
 
 const STATUS_STYLES = {
@@ -828,6 +828,13 @@ export default function AdminPage() {
   const [staffSaving,  setStaffSaving]  = useState(false)
   const [staffError,   setStaffError]   = useState('')
 
+  // Promos tab state (admin only)
+  const [promos,       setPromos]       = useState([])
+  const [promosLoading,setPromosLoading]= useState(false)
+  const [promoForm,    setPromoForm]    = useState(null)  // null=closed, {}=add, item=edit
+  const [promoSaving,  setPromoSaving]  = useState(false)
+  const [promoError,   setPromoError]   = useState('')
+
   const isAdmin = currentUser?.role === 'admin'
 
   // Export state
@@ -998,6 +1005,47 @@ export default function AdminPage() {
     if (!confirm('Delete this review permanently?')) return
     await supabase.from('reviews').delete().eq('id', id)
     fetchReviews()
+  }
+
+  const fetchPromos = useCallback(async () => {
+    setPromosLoading(true)
+    const { data } = await supabase.from('promos').select('*').order('created_at', { ascending: false })
+    setPromos(data ?? [])
+    setPromosLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (currentUser && activeTab === 'promos' && isAdmin) fetchPromos()
+  }, [currentUser, activeTab, isAdmin, fetchPromos])
+
+  async function handlePromoToggle(id, current) {
+    await supabase.from('promos').update({ active: !current }).eq('id', id)
+    fetchPromos()
+  }
+
+  async function handlePromoDelete(id) {
+    if (!confirm('Delete this promo permanently?')) return
+    await supabase.from('promos').delete().eq('id', id)
+    fetchPromos()
+  }
+
+  async function handlePromoSave() {
+    setPromoError('')
+    if (!promoForm?.title?.trim()) { setPromoError('Title is required.'); return }
+    setPromoSaving(true)
+    const payload = {
+      title:    promoForm.title.trim(),
+      subtitle: promoForm.subtitle?.trim() || null,
+      code:     promoForm.code?.trim().toUpperCase() || null,
+      active:   promoForm.active ?? true,
+    }
+    const { error } = promoForm.id
+      ? await supabase.from('promos').update(payload).eq('id', promoForm.id)
+      : await supabase.from('promos').insert(payload)
+    setPromoSaving(false)
+    if (error) { setPromoError(error.message); return }
+    setPromoForm(null)
+    fetchPromos()
   }
 
   async function handleMenuSave(formData) {
@@ -1214,6 +1262,15 @@ export default function AdminPage() {
                 ${activeTab === 'staff' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
             >
               <Users size={15} /> Staff
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('promos')}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
+                ${activeTab === 'promos' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+            >
+              <Tag size={15} /> Promos
             </button>
           )}
         </div>
@@ -1803,6 +1860,143 @@ export default function AdminPage() {
                 </div>
               )}
 
+            </div>
+          )}
+
+          {/* ── PROMOS TAB ───────────────────────────────────── */}
+          {activeTab === 'promos' && isAdmin && (
+            <div className="space-y-4">
+
+              {/* Add / Edit promo form */}
+              {promoForm ? (
+                <div className="bg-white rounded-2xl p-5 border border-brand-muted shadow-sm space-y-4">
+                  <h3 className="font-extrabold text-brand-dark">{promoForm.id ? 'Edit Promo' : 'New Promo'}</h3>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Title *</label>
+                    <input
+                      value={promoForm.title ?? ''}
+                      onChange={e => setPromoForm(p => ({ ...p, title: e.target.value }))}
+                      placeholder="e.g. 🎉 Launch Special!"
+                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Subtitle <span className="normal-case font-normal text-gray-400">(optional)</span></label>
+                    <input
+                      value={promoForm.subtitle ?? ''}
+                      onChange={e => setPromoForm(p => ({ ...p, subtitle: e.target.value }))}
+                      placeholder="e.g. Order online and get free delivery this week!"
+                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Promo Code <span className="normal-case font-normal text-gray-400">(optional, shown to customer)</span></label>
+                    <input
+                      value={promoForm.code ?? ''}
+                      onChange={e => setPromoForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
+                      placeholder="e.g. LAUNCH10"
+                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold tracking-widest outline-none focus:border-brand-orange transition-colors uppercase"
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <div
+                      onClick={() => setPromoForm(p => ({ ...p, active: !p.active }))}
+                      className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${promoForm.active !== false ? 'bg-green-500' : 'bg-gray-300'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${promoForm.active !== false ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </div>
+                    <span className="text-sm font-semibold text-brand-dark">Show on homepage immediately</span>
+                  </label>
+
+                  {promoError && <p className="text-red-500 text-sm font-semibold bg-red-50 rounded-xl px-4 py-2">{promoError}</p>}
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={handlePromoSave}
+                      disabled={promoSaving}
+                      className="flex-1 bg-brand-brown text-white font-extrabold rounded-xl py-3 text-sm disabled:opacity-60"
+                    >
+                      {promoSaving ? 'Saving…' : promoForm.id ? 'Save Changes' : 'Create Promo'}
+                    </button>
+                    <button
+                      onClick={() => { setPromoForm(null); setPromoError('') }}
+                      className="px-4 bg-brand-muted rounded-xl font-bold text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setPromoForm({ title: '', subtitle: '', code: '', active: true })}
+                  className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-brand-orange/40 rounded-2xl py-4 text-brand-orange font-bold text-sm active:bg-brand-orange/5"
+                >
+                  <Plus size={16} /> Create New Promo
+                </button>
+              )}
+
+              {/* Promo list */}
+              {promosLoading ? (
+                <div className="space-y-3">
+                  {[...Array(2)].map((_, i) => <div key={i} className="bg-white rounded-2xl h-24 animate-pulse" />)}
+                </div>
+              ) : promos.length === 0 ? (
+                <div className="text-center py-16">
+                  <Tag size={40} className="text-gray-200 mx-auto mb-3" />
+                  <p className="text-gray-400 font-semibold">No promos yet</p>
+                  <p className="text-gray-400 text-xs mt-1">Create one to show a banner to customers</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {promos.map(promo => (
+                    <div key={promo.id} className={`bg-white rounded-2xl p-4 border shadow-sm ${promo.active ? 'border-green-200' : 'border-brand-muted'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-extrabold text-brand-dark text-sm">{promo.title}</p>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${promo.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {promo.active ? '🟢 Live' : '⏸ Hidden'}
+                            </span>
+                          </div>
+                          {promo.subtitle && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{promo.subtitle}</p>}
+                          {promo.code && (
+                            <span className="inline-block mt-1.5 bg-brand-orange/10 text-brand-orange text-xs font-extrabold tracking-widest px-2 py-0.5 rounded-lg">
+                              {promo.code}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => handlePromoToggle(promo.id, promo.active)}
+                            title={promo.active ? 'Hide' : 'Show'}
+                            className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center"
+                          >
+                            {promo.active ? <ToggleRight size={16} className="text-green-600" /> : <ToggleLeft size={16} className="text-gray-400" />}
+                          </button>
+                          <button
+                            onClick={() => setPromoForm(promo)}
+                            title="Edit"
+                            className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center"
+                          >
+                            <Pencil size={14} className="text-gray-500" />
+                          </button>
+                          <button
+                            onClick={() => handlePromoDelete(promo.id)}
+                            title="Delete"
+                            className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center"
+                          >
+                            <Trash2 size={14} className="text-red-400" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
