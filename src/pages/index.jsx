@@ -8,6 +8,7 @@ import MenuGrid from '../components/MenuGrid'
 import OrderDrawer from '../components/OrderDrawer'
 import PayStatus from '../components/PayStatus'
 import ReviewSection from '../components/ReviewSection'
+import PromoBanner from '../components/PromoBanner'
 import BranchSelector from '../components/BranchSelector'
 import AuthModal from '../components/AuthModal'
 import Footer from '../components/Footer'
@@ -219,6 +220,8 @@ export default function Home() {
             </p>
           </div>
         </div>
+
+        <PromoBanner />
 
         {/* Menu */}
         <main className="max-w-lg mx-auto">
