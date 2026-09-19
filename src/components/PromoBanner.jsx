@@ -8,7 +8,7 @@ export default function PromoBanner() {
   useEffect(() => {
     supabase
       .from('promos')
-      .select('title, subtitle, code')
+      .select('title, subtitle, code, image')
       .eq('active', true)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -23,21 +23,34 @@ export default function PromoBanner() {
       <div className="relative overflow-hidden rounded-3xl shadow-lg"
         style={{ background: 'linear-gradient(135deg, #F38F1D 0%, #c0622a 60%, #7B4A2B 100%)' }}
       >
-        {/* Decorative circles */}
-        <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full opacity-20"
-          style={{ background: 'rgba(255,255,255,0.4)' }} />
-        <div className="absolute -bottom-8 -left-4 w-36 h-36 rounded-full opacity-10"
-          style={{ background: 'rgba(255,255,255,0.5)' }} />
+        {/* Promo image */}
+        {promo.image && (
+          <div className="relative h-44 w-full">
+            <img src={promo.image} alt={promo.title} className="w-full h-full object-cover" />
+            {/* Dark overlay so text on top is readable */}
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 60%)' }} />
+          </div>
+        )}
+
+        {/* Decorative circles (only when no image) */}
+        {!promo.image && (
+          <>
+            <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full opacity-20"
+              style={{ background: 'rgba(255,255,255,0.4)' }} />
+            <div className="absolute -bottom-8 -left-4 w-36 h-36 rounded-full opacity-10"
+              style={{ background: 'rgba(255,255,255,0.5)' }} />
+          </>
+        )}
 
         {/* Shimmer strip */}
         <div className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.12) 50%, transparent 60%)',
+            background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.10) 50%, transparent 60%)',
             animation: 'shimmer 3s infinite',
           }}
         />
 
-        <div className="relative px-5 py-4">
+        <div className={`relative px-5 py-4 ${promo.image ? 'mt-0' : ''}`}>
           {/* Top row: badge + dismiss */}
           <div className="flex items-center justify-between mb-2">
             <span className="bg-white/25 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full tracking-wider uppercase">
@@ -52,13 +65,13 @@ export default function PromoBanner() {
           </div>
 
           {/* Title */}
-          <p className="text-white font-extrabold text-xl leading-tight mb-1">
+          <p className="text-white font-extrabold text-xl leading-tight mb-1 drop-shadow">
             {promo.title}
           </p>
 
           {/* Subtitle */}
           {promo.subtitle && (
-            <p className="text-white/85 text-sm leading-snug mb-3">
+            <p className="text-white/85 text-sm leading-snug mb-3 drop-shadow">
               {promo.subtitle}
             </p>
           )}

@@ -832,8 +832,9 @@ export default function AdminPage() {
   const [promos,       setPromos]       = useState([])
   const [promosLoading,setPromosLoading]= useState(false)
   const [promoForm,    setPromoForm]    = useState(null)  // null=closed, {}=add, item=edit
-  const [promoSaving,  setPromoSaving]  = useState(false)
-  const [promoError,   setPromoError]   = useState('')
+  const [promoSaving,      setPromoSaving]      = useState(false)
+  const [promoError,       setPromoError]       = useState('')
+  const [promoImgUploading,setPromoImgUploading]= useState(false)
 
   const isAdmin = currentUser?.role === 'admin'
 
@@ -1046,6 +1047,21 @@ export default function AdminPage() {
     if (error) { setPromoError(error.message); return }
     setPromoForm(null)
     fetchPromos()
+  }
+
+  async function handlePromoImageUpload(e, promoId) {
+    const file = e.target.files?.[0]
+    if (!file || !promoId) return
+    setPromoImgUploading(true)
+    const form = new FormData()
+    form.append('promoId', promoId)
+    form.append('file', file)
+    const res = await fetch('/api/admin/upload-promo-image', { method: 'POST', body: form })
+    const data = await res.json()
+    setPromoImgUploading(false)
+    if (res.ok) { setPromoForm(p => ({ ...p, image: data.imageUrl })); fetchPromos() }
+    else setPromoError(data.message || 'Image upload failed.')
+    e.target.value = ''
   }
 
   async function handleMenuSave(formData) {
@@ -1902,6 +1918,47 @@ export default function AdminPage() {
                     />
                   </div>
 
+                  {/* Image upload — only available after promo is saved (has an id) */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                      Promo Image <span className="normal-case font-normal text-gray-400">(optional)</span>
+                    </label>
+                    {promoForm.id ? (
+                      <label className="cursor-pointer block">
+                        {promoForm.image ? (
+                          <div className="relative rounded-2xl overflow-hidden h-36 bg-gray-100">
+                            <img src={promoForm.image} alt="Promo" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                              <span className="text-white text-xs font-bold">Tap to change</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="h-36 border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center gap-2 bg-gray-50 active:bg-gray-100">
+                            {promoImgUploading ? (
+                              <p className="text-xs text-gray-400 font-semibold animate-pulse">Uploading…</p>
+                            ) : (
+                              <>
+                                <span className="text-2xl">🖼️</span>
+                                <p className="text-xs text-gray-400 font-semibold">Tap to upload image</p>
+                                <p className="text-[10px] text-gray-300">JPG, PNG or WebP · max 5 MB</p>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={e => handlePromoImageUpload(e, promoForm.id)}
+                        />
+                      </label>
+                    ) : (
+                      <p className="text-xs text-gray-400 bg-gray-50 rounded-xl px-4 py-3 font-semibold">
+                        💡 Save the promo first, then you can add an image.
+                      </p>
+                    )}
+                  </div>
+
                   <label className="flex items-center gap-3 cursor-pointer">
                     <div
                       onClick={() => setPromoForm(p => ({ ...p, active: !p.active }))}
@@ -1953,8 +2010,11 @@ export default function AdminPage() {
               ) : (
                 <div className="space-y-3">
                   {promos.map(promo => (
-                    <div key={promo.id} className={`bg-white rounded-2xl p-4 border shadow-sm ${promo.active ? 'border-green-200' : 'border-brand-muted'}`}>
-                      <div className="flex items-start justify-between gap-3">
+                    <div key={promo.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${promo.active ? 'border-green-200' : 'border-brand-muted'}`}>
+                      {promo.image && (
+                        <img src={promo.image} alt={promo.title} className="w-full h-32 object-cover" />
+                      )}
+                      <div className="p-4 flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-extrabold text-brand-dark text-sm">{promo.title}</p>
