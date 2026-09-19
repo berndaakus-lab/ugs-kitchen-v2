@@ -8,8 +8,9 @@ export default function PromoBanner() {
   useEffect(() => {
     supabase
       .from('promos')
-      .select('title, subtitle, code, image')
+      .select('title, subtitle, code, image, ends_at')
       .eq('active', true)
+      .or('ends_at.is.null,ends_at.gt.' + new Date().toISOString())
       .order('created_at', { ascending: false })
       .limit(1)
       .single()
