@@ -2,18 +2,18 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
 function useCountdown(endsAt) {
-  const [timeLeft, setTimeLeft] = useState(null)
+  const [timeLeft, setTimeLeft] = useState('loading')
 
   useEffect(() => {
-    if (!endsAt) return
+    if (!endsAt) { setTimeLeft(null); return }
     function calc() {
       const diff = Math.max(0, Math.floor((new Date(endsAt) - Date.now()) / 1000))
-      if (diff === 0) { setTimeLeft(null); return }
+      if (diff === 0) { setTimeLeft('expired'); return }
       const d = Math.floor(diff / 86400)
       const h = Math.floor((diff % 86400) / 3600)
       const m = Math.floor((diff % 3600) / 60)
       const s = diff % 60
-      setTimeLeft({ d, h, m, s, diff })
+      setTimeLeft({ d, h, m, s })
     }
     calc()
     const id = setInterval(calc, 1000)
@@ -51,10 +51,10 @@ export default function PromoBanner() {
       .then(({ data }) => { if (data) setPromo(data) })
   }, [])
 
-  // Hide when countdown hits zero
+  // Hide when countdown actually expires
   useEffect(() => {
-    if (promo?.ends_at && timeLeft === null && promo) setVisible(false)
-  }, [timeLeft, promo])
+    if (timeLeft === 'expired') setVisible(false)
+  }, [timeLeft])
 
   if (!promo || !visible) return null
 
@@ -114,7 +114,7 @@ export default function PromoBanner() {
           )}
 
           {/* Countdown */}
-          {timeLeft && (
+          {timeLeft && timeLeft !== 'loading' && timeLeft !== 'expired' && (
             <div className="flex items-end gap-2 mb-3">
               <span className="text-white/70 text-[10px] font-bold uppercase tracking-wider mr-1">Ends in</span>
               {timeLeft.d > 0 && <CountdownBlock label="days" value={timeLeft.d} />}
