@@ -1039,6 +1039,7 @@ export default function AdminPage() {
       subtitle: promoForm.subtitle?.trim() || null,
       code:     promoForm.code?.trim().toUpperCase() || null,
       active:   promoForm.active ?? true,
+      ends_at:  promoForm.ends_at || null,
     }
     const { error } = promoForm.id
       ? await supabase.from('promos').update(payload).eq('id', promoForm.id)
@@ -1918,6 +1919,19 @@ export default function AdminPage() {
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">End Date & Time <span className="normal-case font-normal text-gray-400">(optional — auto-hides when reached)</span></label>
+                    <input
+                      type="datetime-local"
+                      value={promoForm.ends_at ? promoForm.ends_at.slice(0, 16) : ''}
+                      onChange={e => setPromoForm(p => ({ ...p, ends_at: e.target.value ? new Date(e.target.value).toISOString() : null }))}
+                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
+                    />
+                    {promoForm.ends_at && new Date(promoForm.ends_at) < new Date() && (
+                      <p className="text-red-400 text-xs font-semibold mt-1 pl-1">⚠️ This date is in the past — promo will be hidden.</p>
+                    )}
+                  </div>
+
                   {/* Image upload — only available after promo is saved (has an id) */}
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
@@ -2027,6 +2041,11 @@ export default function AdminPage() {
                             <span className="inline-block mt-1.5 bg-brand-orange/10 text-brand-orange text-xs font-extrabold tracking-widest px-2 py-0.5 rounded-lg">
                               {promo.code}
                             </span>
+                          )}
+                          {promo.ends_at && (
+                            <p className={`text-[11px] mt-1 font-semibold ${new Date(promo.ends_at) < new Date() ? 'text-red-400' : 'text-gray-400'}`}>
+                              {new Date(promo.ends_at) < new Date() ? '⏰ Expired' : '⏰ Ends'} {new Date(promo.ends_at).toLocaleString('en-GH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            </p>
                           )}
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
