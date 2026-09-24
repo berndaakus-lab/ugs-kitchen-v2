@@ -9,7 +9,7 @@ import {
   TrendingUp, RefreshCw, LogOut, Eye,
   Star, CheckCircle2, Trash2, MessageSquare,
   UtensilsCrossed, Plus, Pencil, ChevronLeft, ChevronRight, X, ToggleLeft, ToggleRight,
-  Users, ShieldCheck, ShieldOff, Download, FileSpreadsheet, CalendarDays, Calendar, Tag
+  Users, ShieldCheck, ShieldOff, Download, FileSpreadsheet, CalendarDays, Calendar, Tag, MapPin
 } from 'lucide-react'
 
 const STATUS_STYLES = {
@@ -836,6 +836,12 @@ export default function AdminPage() {
   const [promoError,       setPromoError]       = useState('')
   const [promoImgUploading,setPromoImgUploading]= useState(false)
 
+  // Branches tab state (admin only)
+  const [branchForm,    setBranchForm]    = useState(null)
+  const [branchSaving,  setBranchSaving]  = useState(false)
+  const [branchError,   setBranchError]   = useState('')
+  const [newLocation,   setNewLocation]   = useState('')
+
   const isAdmin = currentUser?.role === 'admin'
 
   // Export state
@@ -908,7 +914,7 @@ export default function AdminPage() {
   // Load branches once on login
   useEffect(() => {
     if (!currentUser) return
-    supabase.from('branches').select('id, name, slug').eq('is_active', true).order('sort_order')
+    supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, is_active, sort_order').order('sort_order')
       .then(({ data }) => setBranches(data ?? []))
   }, [currentUser])
 
@@ -1063,6 +1069,45 @@ export default function AdminPage() {
     if (res.ok) { setPromoForm(p => ({ ...p, image: data.imageUrl })); fetchPromos() }
     else setPromoError(data.message || 'Image upload failed.')
     e.target.value = ''
+  }
+
+  async function handleBranchSave() {
+    setBranchError('')
+    if (!branchForm?.name?.trim()) { setBranchError('Branch name is required.'); return }
+    setBranchSaving(true)
+    const slug = branchForm.slug?.trim() ||
+      branchForm.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    const payload = {
+      name:               branchForm.name.trim(),
+      slug,
+      address:            branchForm.address?.trim() || null,
+      phone:              branchForm.phone?.trim() || null,
+      whatsapp:           branchForm.whatsapp?.trim() || null,
+      delivery_locations: branchForm.delivery_locations ?? [],
+      is_active:          branchForm.is_active ?? true,
+      sort_order:         parseInt(branchForm.sort_order) || 0,
+    }
+    const { error } = branchForm.id
+      ? await supabase.from('branches').update(payload).eq('id', branchForm.id)
+      : await supabase.from('branches').insert(payload)
+    setBranchSaving(false)
+    if (error) { setBranchError(error.message); return }
+    setBranchForm(null)
+    setNewLocation('')
+    const { data } = await supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, is_active, sort_order').order('sort_order')
+    setBranches(data ?? [])
+  }
+
+  async function handleBranchToggle(id, current) {
+    await supabase.from('branches').update({ is_active: !current }).eq('id', id)
+    const { data } = await supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, is_active, sort_order').order('sort_order')
+    setBranches(data ?? [])
+  }
+
+  async function handleBranchDelete(id) {
+    if (!confirm('Delete this branch? This cannot be undone.')) return
+    await supabase.from('branches').delete().eq('id', id)
+    setBranches(prev => prev.filter(b => b.id !== id))
   }
 
   async function handleMenuSave(formData) {
@@ -1288,6 +1333,15 @@ export default function AdminPage() {
                 ${activeTab === 'promos' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
             >
               <Tag size={15} className="text-yellow-400" /> Promos
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('branches')}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
+                ${activeTab === 'branches' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+            >
+              <MapPin size={15} className="text-blue-400" /> Branches
             </button>
           )}
         </div>
@@ -2068,6 +2122,165 @@ export default function AdminPage() {
                             title="Delete"
                             className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center"
                           >
+                            <Trash2 size={14} className="text-red-400" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── BRANCHES TAB ─────────────────────────────────── */}
+          {activeTab === 'branches' && isAdmin && (
+            <div className="space-y-4">
+
+              {branchForm ? (
+                <div className="bg-white rounded-2xl p-5 border border-brand-muted shadow-sm space-y-4">
+                  <h3 className="font-extrabold text-brand-dark">{branchForm.id ? 'Edit Branch' : 'New Branch'}</h3>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Branch Name *</label>
+                    <input value={branchForm.name ?? ''} onChange={e => setBranchForm(p => ({ ...p, name: e.target.value }))}
+                      placeholder="e.g. UGs Kitchen — Accra Central"
+                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Slug <span className="normal-case font-normal text-gray-400">(auto-generated if blank)</span></label>
+                    <input value={branchForm.slug ?? ''} onChange={e => setBranchForm(p => ({ ...p, slug: e.target.value.toLowerCase().replace(/\s/g, '-') }))}
+                      placeholder="e.g. accra-central"
+                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors" />
+                    <p className="text-[11px] text-gray-400 mt-1">Used in the URL: ugskitchen.com?branch=<b>{branchForm.slug || 'slug'}</b></p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Address <span className="normal-case font-normal text-gray-400">(optional)</span></label>
+                    <input value={branchForm.address ?? ''} onChange={e => setBranchForm(p => ({ ...p, address: e.target.value }))}
+                      placeholder="e.g. 12 High Street, Accra"
+                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Phone</label>
+                      <input value={branchForm.phone ?? ''} onChange={e => setBranchForm(p => ({ ...p, phone: e.target.value }))}
+                        placeholder="024 XXX XXXX"
+                        className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">WhatsApp</label>
+                      <input value={branchForm.whatsapp ?? ''} onChange={e => setBranchForm(p => ({ ...p, whatsapp: e.target.value }))}
+                        placeholder="024 XXX XXXX"
+                        className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Delivery Locations</label>
+                    <div className="space-y-2 mb-2">
+                      {(branchForm.delivery_locations ?? []).map((loc, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-brand-cream rounded-xl px-3 py-2">
+                          <span className="flex-1 text-sm font-semibold text-brand-dark">{loc}</span>
+                          <button onClick={() => setBranchForm(p => ({ ...p, delivery_locations: p.delivery_locations.filter((_, j) => j !== i) }))}
+                            className="text-red-400 font-bold text-sm">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        value={newLocation}
+                        onChange={e => setNewLocation(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && newLocation.trim()) {
+                            setBranchForm(p => ({ ...p, delivery_locations: [...(p.delivery_locations ?? []), newLocation.trim()] }))
+                            setNewLocation('')
+                          }
+                        }}
+                        placeholder="e.g. Pickup, East Legon, Tema…"
+                        className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
+                      />
+                      <button
+                        onClick={() => { if (newLocation.trim()) { setBranchForm(p => ({ ...p, delivery_locations: [...(p.delivery_locations ?? []), newLocation.trim()] })); setNewLocation('') }}}
+                        className="px-4 bg-brand-orange text-white font-extrabold rounded-xl text-sm"
+                      >+ Add</button>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">Type a location and press Enter or tap + Add. Customers see this dropdown when ordering.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sort Order <span className="normal-case font-normal text-gray-400">(lower = first)</span></label>
+                    <input type="number" value={branchForm.sort_order ?? 0} onChange={e => setBranchForm(p => ({ ...p, sort_order: e.target.value }))}
+                      className="w-24 border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors" />
+                  </div>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <div onClick={() => setBranchForm(p => ({ ...p, is_active: !p.is_active }))}
+                      className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${branchForm.is_active !== false ? 'bg-green-500' : 'bg-gray-300'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${branchForm.is_active !== false ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </div>
+                    <span className="text-sm font-semibold text-brand-dark">Branch is active (visible to customers)</span>
+                  </label>
+
+                  {branchError && <p className="text-red-500 text-sm font-semibold bg-red-50 rounded-xl px-4 py-2">{branchError}</p>}
+
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={handleBranchSave} disabled={branchSaving}
+                      className="flex-1 bg-brand-brown text-white font-extrabold rounded-xl py-3 text-sm disabled:opacity-60">
+                      {branchSaving ? 'Saving…' : branchForm.id ? 'Save Changes' : 'Create Branch'}
+                    </button>
+                    <button onClick={() => { setBranchForm(null); setBranchError(''); setNewLocation('') }}
+                      className="px-4 bg-brand-muted rounded-xl font-bold text-sm">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setBranchForm({ name: '', slug: '', address: '', phone: '', whatsapp: '', delivery_locations: [], is_active: true, sort_order: 0 })}
+                  className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-blue-300 rounded-2xl py-4 text-blue-500 font-bold text-sm active:bg-blue-50">
+                  <Plus size={16} /> Add New Branch
+                </button>
+              )}
+
+              {/* Branch list */}
+              {branches.length === 0 ? (
+                <div className="text-center py-16">
+                  <MapPin size={40} className="text-gray-200 mx-auto mb-3" />
+                  <p className="text-gray-400 font-semibold">No branches yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {branches.map(branch => (
+                    <div key={branch.id} className={`bg-white rounded-2xl p-4 border shadow-sm ${branch.is_active ? 'border-green-200' : 'border-brand-muted opacity-60'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-extrabold text-brand-dark text-sm">{branch.name}</p>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${branch.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {branch.is_active ? '🟢 Active' : '⏸ Inactive'}
+                            </span>
+                          </div>
+                          {branch.address && <p className="text-xs text-gray-400 mt-0.5">📍 {branch.address}</p>}
+                          {branch.phone && <p className="text-xs text-gray-400">📞 {branch.phone}</p>}
+                          {(branch.delivery_locations ?? []).length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {branch.delivery_locations.map((loc, i) => (
+                                <span key={i} className="bg-brand-cream text-brand-dark text-[10px] font-bold px-2 py-0.5 rounded-lg">{loc}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button onClick={() => handleBranchToggle(branch.id, branch.is_active)} title={branch.is_active ? 'Deactivate' : 'Activate'}
+                            className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center">
+                            {branch.is_active ? <ToggleRight size={16} className="text-green-600" /> : <ToggleLeft size={16} className="text-gray-400" />}
+                          </button>
+                          <button onClick={() => { setBranchForm(branch); setNewLocation('') }} title="Edit"
+                            className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center">
+                            <Pencil size={14} className="text-gray-500" />
+                          </button>
+                          <button onClick={() => handleBranchDelete(branch.id)} title="Delete"
+                            className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
                             <Trash2 size={14} className="text-red-400" />
                           </button>
                         </div>
