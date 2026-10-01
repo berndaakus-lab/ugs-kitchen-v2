@@ -516,18 +516,20 @@ export default function OrderDrawer({ onPaymentSuccess }) {
               </p>
             </div>
           ) : (
-            <p className="text-[11px] text-center text-amber-600 font-semibold">
-              ⚠️ Confirmed orders cannot be cancelled
-            </p>
-            <p className="text-[11px] text-center text-gray-400">
-              Note: Delivery fee is not included in this total
-            </p>
-            <button
-              onClick={handlePlaceOrder}
-              className="w-full bg-brand-brown text-white font-extrabold rounded-2xl py-4 text-lg active:bg-brand-dark transition-colors shadow-lg"
-            >
-              Place Order & Pay {formatGHS(totalAmount)}
-            </button>
+            <>
+              <p className="text-[11px] text-center text-amber-600 font-semibold">
+                ⚠️ Confirmed orders cannot be cancelled
+              </p>
+              <p className="text-[11px] text-center text-gray-400">
+                Note: Delivery fee is not included in this total
+              </p>
+              <button
+                onClick={handlePlaceOrder}
+                className="w-full bg-brand-brown text-white font-extrabold rounded-2xl py-4 text-lg active:bg-brand-dark transition-colors shadow-lg"
+              >
+                Place Order & Pay {formatGHS(totalAmount)}
+              </button>
+            </>
           )}
         </div>
       </div>
