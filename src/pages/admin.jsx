@@ -1090,6 +1090,7 @@ export default function AdminPage() {
       whatsapp:           branchForm.whatsapp?.trim() || null,
       delivery_locations: branchForm.delivery_locations ?? [],
       sms_recipients:     branchForm.sms_recipients ?? [],
+      business_hours:     branchForm.business_hours ?? null,
       is_active:          branchForm.is_active ?? true,
       sort_order:         parseInt(branchForm.sort_order) || 0,
     }
