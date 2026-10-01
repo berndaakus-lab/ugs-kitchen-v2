@@ -78,12 +78,23 @@ export default async function handler(req, res) {
     // Fetch full order to build SMS messages
     const { data: order } = await supabase
       .from('orders')
-      .select('*, branches(name, phone, sms_recipients)')
+      .select('*')
       .eq('id', orderId)
       .single()
 
     if (order) {
-      const ownerMsg = msgOwnerNewOrder(order, order.branches)
+      // Fetch branch separately — avoids FK join issues if relationship isn't defined in Supabase
+      let branch = null
+      if (order.branch_id) {
+        const { data: b } = await supabase
+          .from('branches')
+          .select('name, phone, sms_recipients')
+          .eq('id', order.branch_id)
+          .single()
+        branch = b
+      }
+
+      const ownerMsg = msgOwnerNewOrder(order, branch)
 
       // Build the full list of staff/owner phones to notify:
       // 1. Global OWNER_PHONES env var (comma-separated) — CEO / global owner
@@ -91,10 +102,10 @@ export default async function handler(req, res) {
       // 3. Branch main phone as fallback
       const globalPhones = (process.env.OWNER_PHONES || process.env.OWNER_PHONE || '')
         .split(',').map(p => p.trim()).filter(Boolean)
-      const branchRecipients = Array.isArray(order.branches?.sms_recipients)
-        ? order.branches.sms_recipients
+      const branchRecipients = Array.isArray(branch?.sms_recipients)
+        ? branch.sms_recipients
         : []
-      const branchPhone = order.branches?.phone ? [order.branches.phone] : []
+      const branchPhone = branch?.phone ? [branch.phone] : []
       const allStaffPhones = [...new Set([...globalPhones, ...branchRecipients, ...branchPhone])]
 
       // Send new-order alert to every staff/owner number
