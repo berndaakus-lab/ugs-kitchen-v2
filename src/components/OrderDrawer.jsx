@@ -517,10 +517,10 @@ export default function OrderDrawer({ onPaymentSuccess }) {
             </div>
           ) : (
             <>
-              <p className="text-[11px] text-center text-amber-600 font-semibold">
+              <p className="text-sm text-center text-red-600 font-bold">
                 ⚠️ Confirmed orders cannot be cancelled
               </p>
-              <p className="text-[11px] text-center text-gray-400">
+              <p className="text-sm text-center text-red-500 font-semibold">
                 Note: Delivery fee is not included in this total
               </p>
               <button
