@@ -15,7 +15,7 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { orderId, status, wait_time_minutes, delivered_by, delivered_by_id } = req.body ?? {}
+  const { orderId, status, wait_time_minutes, delivered_by, delivered_by_id, actioned_by, actioned_by_id } = req.body ?? {}
   if (!orderId || (!status && wait_time_minutes == null)) {
     return res.status(400).json({ message: 'Missing orderId or update fields' })
   }
@@ -41,6 +41,10 @@ export default async function handler(req, res) {
   // Update the status
   const updates = { status }
   if (wait_time_minutes != null) updates.wait_time_minutes = parseInt(wait_time_minutes)
+  // Log who actioned this status change
+  if (actioned_by)    updates.actioned_by    = actioned_by
+  if (actioned_by_id) updates.actioned_by_id = actioned_by_id
+  updates.actioned_at = new Date().toISOString()
   if (status === 'ready' && !order.reminded_at) {
     updates.reminded_at = new Date().toISOString()
   }

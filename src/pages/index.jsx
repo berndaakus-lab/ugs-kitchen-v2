@@ -15,6 +15,7 @@ import Footer from '../components/Footer'
 import { useCart } from '../context/CartContext'
 import { useBranch } from '../context/BranchContext'
 import { useAuth } from '../context/AuthContext'
+import { isOpen as branchIsOpen, openHoursToday } from '../lib/businessHours'
 
 export default function Home() {
   const [menuItems,   setMenuItems]   = useState([])
@@ -41,6 +42,14 @@ export default function Home() {
   const { totalItems, openDrawer, clearCart } = useCart()
   const { currentBranch, switchBranch, loading: branchLoading } = useBranch()
   const { customer, isLoggedIn, signOut } = useAuth()
+
+  const [branchOpen, setBranchOpen] = useState(true)
+  useEffect(() => {
+    function check() { setBranchOpen(branchIsOpen(currentBranch?.business_hours)) }
+    check()
+    const id = setInterval(check, 60_000)
+    return () => clearInterval(id)
+  }, [currentBranch])
 
   // Auto-open sign-in modal when redirected from /orders as a guest
   useEffect(() => {
@@ -223,12 +232,31 @@ export default function Home() {
 
         <PromoBanner />
 
+        {/* Out-of-service banner */}
+        {!branchOpen && (
+          <div className="max-w-lg mx-auto px-4 py-3">
+            <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 text-center">
+              <p className="text-2xl mb-1">🔒</p>
+              <p className="font-extrabold text-red-700 text-lg">We are currently closed</p>
+              {openHoursToday(currentBranch?.business_hours) ? (
+                <p className="text-sm text-red-500 mt-1">
+                  Today&apos;s hours: {openHoursToday(currentBranch?.business_hours)}
+                </p>
+              ) : (
+                <p className="text-sm text-red-500 mt-1">We are closed today. Check back tomorrow!</p>
+              )}
+              <p className="text-xs text-gray-400 mt-2">Online ordering is disabled outside working hours.</p>
+            </div>
+          </div>
+        )}
+
         {/* Menu */}
         <main className="max-w-lg mx-auto">
           <MenuGrid
             menuItems={menuItems}
             categories={categories}
             loading={loading || branchLoading}
+            disabled={!branchOpen}
           />
         </main>
 

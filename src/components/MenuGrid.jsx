@@ -61,14 +61,14 @@ function CategoryCard({ cat, itemCount, onClick }) {
 }
 
 // ── Individual menu item card (unchanged from before) ────────────
-function MenuCard({ item }) {
+function MenuCard({ item, disabled }) {
   const { addItem, decrement, items } = useCart()
   const cartItem = items.find(i => i.id === item.id)
   const qty = cartItem?.quantity ?? 0
   const [imgError, setImgError] = useState(false)
 
   const hasImage = item.image && !imgError
-  const unavailable = !item.is_available
+  const unavailable = !item.is_available || disabled
 
   return (
     <div className={`bg-white rounded-2xl overflow-hidden shadow-sm border border-brand-muted flex flex-col transition-transform ${unavailable ? 'opacity-70' : 'active:scale-95'}`}>
@@ -169,7 +169,7 @@ function CartBar({ totalItems, totalAmount, openDrawer }) {
 }
 
 // ── Main export ──────────────────────────────────────────────────
-export default function MenuGrid({ menuItems, categories, loading }) {
+export default function MenuGrid({ menuItems, categories, loading, disabled }) {
   const { totalItems, totalAmount, openDrawer } = useCart()
   const [selectedCat, setSelectedCat] = useState(null)
 
@@ -213,7 +213,7 @@ export default function MenuGrid({ menuItems, categories, loading }) {
         {/* Items grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-4 pt-3">
           {items.map(item => (
-            <MenuCard key={item.id} item={item} />
+            <MenuCard key={item.id} item={item} disabled={disabled} />
           ))}
         </div>
 
