@@ -78,17 +78,31 @@ export default async function handler(req, res) {
     // Fetch full order to build SMS messages
     const { data: order } = await supabase
       .from('orders')
-      .select('*, branches(name, phone)')
+      .select('*, branches(name, phone, sms_recipients)')
       .eq('id', orderId)
       .single()
 
     if (order) {
-      const ownerPhone = order.branches?.phone || process.env.OWNER_PHONE
-      // SMS to owner (new confirmed order alert)
-      if (ownerPhone) {
-        sendSMS({ to: ownerPhone, message: msgOwnerNewOrder(order, order.branches) })
+      const ownerMsg = msgOwnerNewOrder(order, order.branches)
+
+      // Build the full list of staff/owner phones to notify:
+      // 1. Global OWNER_PHONES env var (comma-separated) — CEO / global owner
+      // 2. Branch-level sms_recipients (JSON array on the branch row)
+      // 3. Branch main phone as fallback
+      const globalPhones = (process.env.OWNER_PHONES || process.env.OWNER_PHONE || '')
+        .split(',').map(p => p.trim()).filter(Boolean)
+      const branchRecipients = Array.isArray(order.branches?.sms_recipients)
+        ? order.branches.sms_recipients
+        : []
+      const branchPhone = order.branches?.phone ? [order.branches.phone] : []
+      const allStaffPhones = [...new Set([...globalPhones, ...branchRecipients, ...branchPhone])]
+
+      // Send new-order alert to every staff/owner number
+      for (const phone of allStaffPhones) {
+        sendSMS({ to: phone, message: ownerMsg }).catch(() => {})
       }
-      // SMS to customer (confirmation + 30-min heads-up)
+
+      // SMS to customer (confirmation)
       sendSMS({ to: smsPhone(order), message: msgOrderConfirmed(order) })
     }
   }

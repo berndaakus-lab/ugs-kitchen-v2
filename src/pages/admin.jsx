@@ -62,6 +62,8 @@ function ordersToRows(orders, branchName = '') {
     'Branch':        branchName || o.branch_id || '',
     'Delivered By':  o.delivered_by ?? '',
     'Delivered At':  o.delivered_at ? new Date(o.delivered_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' }) : '',
+    'Actioned By':   o.actioned_by ?? '',
+    'Actioned At':   o.actioned_at ? new Date(o.actioned_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' }) : '',
     'Notes':         o.notes ?? '',
   }))
 }
@@ -420,6 +422,9 @@ function OrderModal({ order, onClose, onStatusChange, onAddTime }) {
           <Row label="Total"    value={formatGHS(order.total_amount)} bold />
           {order.delivered_by && (
             <Row label="Delivered by" value={`${order.delivered_by}${order.delivered_at ? ' · ' + formatTime(order.delivered_at) : ''}`} />
+          )}
+          {order.actioned_by && (
+            <Row label="Actioned by" value={`${order.actioned_by}${order.actioned_at ? ' · ' + formatTime(order.actioned_at) : ''}`} />
           )}
         </div>
 
@@ -914,7 +919,7 @@ export default function AdminPage() {
   // Load branches once on login
   useEffect(() => {
     if (!currentUser) return
-    supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, is_active, sort_order').order('sort_order')
+    supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, sms_recipients, business_hours, is_active, sort_order').order('sort_order')
       .then(({ data }) => setBranches(data ?? []))
   }, [currentUser])
 
@@ -1084,6 +1089,7 @@ export default function AdminPage() {
       phone:              branchForm.phone?.trim() || null,
       whatsapp:           branchForm.whatsapp?.trim() || null,
       delivery_locations: branchForm.delivery_locations ?? [],
+      sms_recipients:     branchForm.sms_recipients ?? [],
       is_active:          branchForm.is_active ?? true,
       sort_order:         parseInt(branchForm.sort_order) || 0,
     }
@@ -1094,13 +1100,13 @@ export default function AdminPage() {
     if (error) { setBranchError(error.message); return }
     setBranchForm(null)
     setNewLocation('')
-    const { data } = await supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, is_active, sort_order').order('sort_order')
+    const { data } = await supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, sms_recipients, business_hours, is_active, sort_order').order('sort_order')
     setBranches(data ?? [])
   }
 
   async function handleBranchToggle(id, current) {
     await supabase.from('branches').update({ is_active: !current }).eq('id', id)
-    const { data } = await supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, is_active, sort_order').order('sort_order')
+    const { data } = await supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, sms_recipients, business_hours, is_active, sort_order').order('sort_order')
     setBranches(data ?? [])
   }
 
@@ -1217,7 +1223,12 @@ export default function AdminPage() {
     const res = await fetch('/api/admin/update-order', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ orderId, status: newStatus }),
+      body:    JSON.stringify({
+        orderId,
+        status:          newStatus,
+        actioned_by:     currentUser?.name ?? null,
+        actioned_by_id:  currentUser?.id   ?? null,
+      }),
     })
 
     if (!res.ok) {
@@ -2210,6 +2221,81 @@ export default function AdminPage() {
                     <p className="text-[11px] text-gray-400 mt-1">Type a location and press Enter or tap + Add. Customers see this dropdown when ordering.</p>
                   </div>
 
+                  {/* SMS Recipients */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                      Extra SMS Recipients <span className="normal-case font-normal text-gray-400">(branch supervisor, manager, etc.)</span>
+                    </label>
+                    <div className="space-y-2 mb-2">
+                      {(branchForm.sms_recipients ?? []).map((phone, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-brand-cream rounded-xl px-3 py-2">
+                          <span className="flex-1 text-sm font-semibold text-brand-dark">📱 {phone}</span>
+                          <button onClick={() => setBranchForm(p => ({ ...p, sms_recipients: p.sms_recipients.filter((_, j) => j !== i) }))}
+                            className="text-red-400 font-bold text-sm">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        id="sms-recipient-input"
+                        type="tel"
+                        placeholder="024 XXX XXXX"
+                        className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && e.target.value.trim()) {
+                            setBranchForm(p => ({ ...p, sms_recipients: [...(p.sms_recipients ?? []), e.target.value.trim()] }))
+                            e.target.value = ''
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          const input = document.getElementById('sms-recipient-input')
+                          if (input?.value.trim()) {
+                            setBranchForm(p => ({ ...p, sms_recipients: [...(p.sms_recipients ?? []), input.value.trim()] }))
+                            input.value = ''
+                          }
+                        }}
+                        className="px-4 bg-brand-orange text-white font-extrabold rounded-xl text-sm"
+                      >+ Add</button>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">These numbers receive an SMS alert for every new order at this branch. CEO phone is set in Vercel env (OWNER_PHONES).</p>
+                  </div>
+
+                  {/* Business Hours */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Business Hours</label>
+                    <div className="space-y-2">
+                      {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, i) => {
+                        const hours = (branchForm.business_hours ?? []).find(h => h.day === i) ?? { day: i, open: '08:00', close: '22:00', closed: false }
+                        const update = (field, val) => {
+                          const current = branchForm.business_hours ?? Array.from({length:7},(_,d)=>({day:d,open:'08:00',close:'22:00',closed:false}))
+                          const updated = current.map(h => h.day === i ? {...h,[field]:val} : h)
+                          if (!updated.find(h => h.day === i)) updated.push({...hours,[field]:val})
+                          setBranchForm(p => ({...p, business_hours: updated}))
+                        }
+                        return (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="w-8 text-xs font-bold text-gray-500">{day}</span>
+                            <label className="flex items-center gap-1 cursor-pointer">
+                              <input type="checkbox" checked={!hours.closed} onChange={e => update('closed', !e.target.checked)} className="accent-brand-orange" />
+                              <span className="text-xs text-gray-500">Open</span>
+                            </label>
+                            {!hours.closed && <>
+                              <input type="time" value={hours.open} onChange={e => update('open', e.target.value)}
+                                className="border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold outline-none focus:border-brand-orange" />
+                              <span className="text-xs text-gray-400">–</span>
+                              <input type="time" value={hours.close} onChange={e => update('close', e.target.value)}
+                                className="border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold outline-none focus:border-brand-orange" />
+                            </>}
+                            {hours.closed && <span className="text-xs text-red-400 font-semibold">Closed</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">Outside these hours customers see a "We are closed" screen.</p>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sort Order <span className="normal-case font-normal text-gray-400">(lower = first)</span></label>
                     <input type="number" value={branchForm.sort_order ?? 0} onChange={e => setBranchForm(p => ({ ...p, sort_order: e.target.value }))}
@@ -2236,7 +2322,7 @@ export default function AdminPage() {
                   </div>
                 </div>
               ) : (
-                <button onClick={() => setBranchForm({ name: '', slug: '', address: '', phone: '', whatsapp: '', delivery_locations: [], is_active: true, sort_order: 0 })}
+                <button onClick={() => setBranchForm({ name: '', slug: '', address: '', phone: '', whatsapp: '', delivery_locations: [], sms_recipients: [], is_active: true, sort_order: 0 })}
                   className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-blue-300 rounded-2xl py-4 text-blue-500 font-bold text-sm active:bg-blue-50">
                   <Plus size={16} /> Add New Branch
                 </button>
