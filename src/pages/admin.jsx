@@ -1089,7 +1089,7 @@ export default function AdminPage() {
       phone:              branchForm.phone?.trim() || null,
       whatsapp:           branchForm.whatsapp?.trim() || null,
       delivery_locations: branchForm.delivery_locations ?? [],
-      sms_recipients:     branchForm.sms_recipients ?? [],
+      sms_recipients:     (branchForm.sms_recipients ?? []).filter(p => p?.trim()),
       business_hours:     branchForm.business_hours ?? null,
       is_active:          branchForm.is_active ?? true,
       sort_order:         parseInt(branchForm.sort_order) || 0,
