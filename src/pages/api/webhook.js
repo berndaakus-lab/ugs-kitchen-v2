@@ -103,7 +103,7 @@ export default async function handler(req, res) {
       const globalPhones = (process.env.OWNER_PHONES || process.env.OWNER_PHONE || '')
         .split(',').map(p => p.trim()).filter(Boolean)
       const branchRecipients = Array.isArray(branch?.sms_recipients)
-        ? branch.sms_recipients
+        ? branch.sms_recipients.filter(p => typeof p === 'string' && p.trim())
         : []
       const branchPhone = branch?.phone ? [branch.phone] : []
       const allStaffPhones = [...new Set([...globalPhones, ...branchRecipients, ...branchPhone])]
