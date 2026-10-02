@@ -26,7 +26,7 @@ export default async function handler(req, res) {
       // Only update if not already paid (avoid duplicate SMS if webhook fires too)
       const { data: existing } = await supabase
         .from('orders')
-        .select('status, momo_number, contact_phone, customer_name, delivery_location, total_amount, items, branches(name, phone)')
+        .select('*')
         .eq('id', orderId)
         .single()
 
@@ -40,10 +40,25 @@ export default async function handler(req, res) {
           })
           .eq('id', orderId)
 
-        // Send notifications (SMS + push) — only fires once
-        const ownerPhone = existing.branches?.phone || process.env.OWNER_PHONE
-        if (ownerPhone) {
-          sendSMS({ to: ownerPhone, message: msgOwnerNewOrder(existing, existing.branches) })
+        // Fetch branch separately to avoid FK join issues
+        let branch = null
+        if (existing.branch_id) {
+          const { data: b } = await supabase
+            .from('branches')
+            .select('name, phone, sms_recipients')
+            .eq('id', existing.branch_id)
+            .single()
+          branch = b
+        }
+
+        // Send staff SMS to all recipients (global + branch-level)
+        const globalPhones = (process.env.OWNER_PHONES || process.env.OWNER_PHONE || '')
+          .split(',').map(p => p.trim()).filter(Boolean)
+        const branchRecipients = Array.isArray(branch?.sms_recipients) ? branch.sms_recipients : []
+        const branchPhone = branch?.phone ? [branch.phone] : []
+        const allStaffPhones = [...new Set([...globalPhones, ...branchRecipients, ...branchPhone])]
+        for (const phone of allStaffPhones) {
+          sendSMS({ to: phone, message: msgOwnerNewOrder(existing, branch) }).catch(() => {})
         }
         sendSMS({ to: smsPhone(existing), message: msgOrderConfirmed(existing) })
 
