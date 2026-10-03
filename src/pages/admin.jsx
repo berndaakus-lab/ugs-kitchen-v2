@@ -846,6 +846,7 @@ export default function AdminPage() {
   const [branchSaving,  setBranchSaving]  = useState(false)
   const [branchError,   setBranchError]   = useState('')
   const [newLocation,   setNewLocation]   = useState('')
+  const [newSmsPhone,   setNewSmsPhone]   = useState('')
 
   const isAdmin = currentUser?.role === 'admin'
 
@@ -1101,6 +1102,7 @@ export default function AdminPage() {
     if (error) { setBranchError(error.message); return }
     setBranchForm(null)
     setNewLocation('')
+    setNewSmsPhone('')
     const { data } = await supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, sms_recipients, business_hours, is_active, sort_order').order('sort_order')
     setBranches(data ?? [])
   }
@@ -2238,23 +2240,23 @@ export default function AdminPage() {
                     </div>
                     <div className="flex gap-2">
                       <input
-                        id="sms-recipient-input"
                         type="tel"
+                        value={newSmsPhone}
+                        onChange={e => setNewSmsPhone(e.target.value)}
                         placeholder="024 XXX XXXX"
                         className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none focus:border-brand-orange transition-colors"
                         onKeyDown={e => {
-                          if (e.key === 'Enter' && e.target.value.trim()) {
-                            setBranchForm(p => ({ ...p, sms_recipients: [...(p.sms_recipients ?? []), e.target.value.trim()] }))
-                            e.target.value = ''
+                          if (e.key === 'Enter' && newSmsPhone.trim()) {
+                            setBranchForm(p => ({ ...p, sms_recipients: [...(p.sms_recipients ?? []), newSmsPhone.trim()] }))
+                            setNewSmsPhone('')
                           }
                         }}
                       />
                       <button
                         onClick={() => {
-                          const input = document.getElementById('sms-recipient-input')
-                          if (input?.value.trim()) {
-                            setBranchForm(p => ({ ...p, sms_recipients: [...(p.sms_recipients ?? []), input.value.trim()] }))
-                            input.value = ''
+                          if (newSmsPhone.trim()) {
+                            setBranchForm(p => ({ ...p, sms_recipients: [...(p.sms_recipients ?? []), newSmsPhone.trim()] }))
+                            setNewSmsPhone('')
                           }
                         }}
                         className="px-4 bg-brand-orange text-white font-extrabold rounded-xl text-sm"
