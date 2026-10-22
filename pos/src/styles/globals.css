@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-brand-cream font-sans text-brand-dark;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary { @apply btn bg-brand-orange text-white hover:brightness-95; }
+  .btn-dark    { @apply btn bg-brand-dark text-white hover:bg-black; }
+  .btn-ghost   { @apply btn border border-brand-muted bg-white hover:bg-brand-muted; }
+  .btn-danger  { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .input {
+    @apply w-full rounded-xl border border-brand-muted bg-white px-4 py-3 text-lg outline-none focus:border-brand-orange;
+  }
+  .card { @apply rounded-2xl bg-white p-4 shadow-sm; }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+/* ─── Thermal printing (80mm) ─────────────────────────── */
+#print-root { display: none; }
+
+@media print {
+  @page { size: 80mm auto; margin: 0; }
+  body * { visibility: hidden; }
+  #print-root, #print-root * { visibility: visible; }
+  #print-root {
+    display: block;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 80mm;
+    background: #fff;
+    color: #000;
+  }
+  .slip {
+    padding: 3mm 4mm;
+    font-size: 12px;
+    line-height: 1.35;
+    font-family: 'Courier New', monospace;
+  }
+}
