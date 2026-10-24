@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { Minus, Plus, Printer, Receipt as ReceiptIcon, Trash2, X } from 'lucide-react'
 import Layout, { Modal, ErrorText, StatusBadge } from '@/components/Layout'
 import VoidModal from '@/components/VoidModal'
@@ -63,6 +64,9 @@ export default function Cashier() {
 
   if (me && !me.shift) {
     return <Layout me={me}><OpenShift onOpened={reloadMe} /></Layout>
+  }
+  if (me?.shift?.elsewhere) {
+    return <Layout me={me}><ShiftElsewhere shift={me.shift} /></Layout>
   }
 
   return (
@@ -181,6 +185,29 @@ export default function Cashier() {
       alert(err.message)
     }
   }
+}
+
+// Admin switched branch while their shift (and its cash drawer) is open at another one.
+function ShiftElsewhere({ shift }) {
+  const [busy, setBusy] = useState(false)
+
+  async function switchBack() {
+    setBusy(true)
+    await api('auth/branch', { method: 'POST', body: { branch_id: shift.branch_id } }).catch(() => {})
+    window.location.reload()
+  }
+
+  return (
+    <div className="card mx-auto mt-16 max-w-sm space-y-3">
+      <h2 className="text-xl font-black">Your shift is open at {shift.branch_name}</h2>
+      <p className="text-sm text-gray-600">
+        Sales go into the cash drawer of the branch where the shift was opened. Switch back to sell,
+        or close that shift on My shift before selling here.
+      </p>
+      <button className="btn-primary w-full" disabled={busy} onClick={switchBack}>Switch to {shift.branch_name}</button>
+      <Link href="/shift" className="btn-ghost w-full">Go to My shift</Link>
+    </div>
+  )
 }
 
 function OpenShift({ onOpened }) {
