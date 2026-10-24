@@ -1,5 +1,5 @@
 import { db, rpc, loadSale, staffNames, today } from '@/lib/supabaseAdmin'
-import { withAuth } from '@/lib/session'
+import { withAuth, isElevated } from '@/lib/session'
 import { broadcast } from '@/lib/broadcast'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -13,7 +13,7 @@ export default withAuth(async (req, res) => {
 
 // POST { client_ref, items: [{menu_item_id, qty}], payments: [{method, amount, tendered?, reference?}] }
 async function createSale(req, res) {
-  if (!['cashier', 'manager'].includes(req.user.role)) {
+  if (req.user.role !== 'cashier' && !isElevated(req.user.role)) {
     return res.status(403).json({ message: 'Only cashiers can take payments.' })
   }
 
