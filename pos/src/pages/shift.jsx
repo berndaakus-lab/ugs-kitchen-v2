@@ -50,9 +50,10 @@ function CashierShift({ me, reloadMe, print }) {
 
   if (!report) {
     return (
-      <div className="card text-center text-gray-500">
-        {me?.shift ? 'Loading…' : <>No open shift. <a href="/cashier" className="font-bold text-brand-orange">Open one on the Sell screen.</a></>}
-        <ErrorText>{error}</ErrorText>
+      <div className="card space-y-2 text-center text-gray-500">
+        {error
+          ? <ErrorText>{error}</ErrorText>
+          : me?.shift ? 'Loading…' : <>No open shift. <a href="/cashier" className="font-bold text-brand-orange">Open one on the Sell screen.</a></>}
       </div>
     )
   }
@@ -60,6 +61,11 @@ function CashierShift({ me, reloadMe, print }) {
   const closed = Boolean(report.shift.closed_at)
   return (
     <>
+      {me?.shift?.elsewhere && !closed && (
+        <div className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+          This shift was opened at {me.shift.branch_name}. Count that branch's drawer when you close it.
+        </div>
+      )}
       <ReportCard report={report} />
       <button className="btn-ghost" onClick={() => print('zreport', report)}><Printer size={18} /> Print {closed ? 'Z' : 'X'}-report</button>
 
