@@ -44,23 +44,24 @@ export default function Server() {
   }
 
   return (
-    <Layout me={me}>
-      <div className="grid h-[calc(100vh-52px)] grid-cols-1 md:grid-cols-[1fr_340px]">
-        <section className="flex min-h-0 flex-col gap-3 overflow-y-auto p-4">
+    <Layout fill me={me}>
+      {/* Phone: ticket panel on top, queue below (capped). md+: side by side. */}
+      <div className="flex h-full flex-col md:grid md:grid-cols-[minmax(0,1fr)_320px] lg:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
           {/* USB/Bluetooth scanners type the QR content followed by Enter. */}
           <form onSubmit={e => { e.preventDefault(); if (code.trim()) open(code.trim()) }} className="flex gap-2">
             <div className="relative flex-1">
               <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 ref={inputRef}
-                className="input pl-11 text-xl font-bold"
-                placeholder="Scan ticket or type number (e.g. 42)"
+                className="input pl-11 text-lg font-bold md:text-xl"
+                placeholder="Scan or type ticket no."
                 value={code}
                 onChange={e => setCode(e.target.value)}
                 autoFocus
               />
             </div>
-            <button className="btn-dark px-6">Open</button>
+            <button className="btn-dark px-4 md:px-6">Open</button>
           </form>
           <ErrorText>{error}</ErrorText>
           {sale
@@ -68,7 +69,7 @@ export default function Server() {
             : <div className="card p-10 text-center text-gray-400">Collect the customer's food ticket, then scan it or type its number.</div>}
         </section>
 
-        <aside className="min-h-0 overflow-y-auto border-l border-brand-muted bg-white">
+        <aside className="max-h-[35%] min-h-0 min-w-0 shrink-0 overflow-y-auto border-t border-brand-muted bg-white md:max-h-none md:border-l md:border-t-0">
           <div className="sticky top-0 border-b bg-white p-3 font-black">Waiting to be served ({queue.length})</div>
           {queue.map(s => (
             <button key={s.id} onClick={() => open(s.id)} className="flex w-full flex-col gap-1 border-b p-3 text-left hover:bg-brand-cream">
@@ -142,7 +143,7 @@ function ServePanel({ sale, branchName, print, onChange, onServed, onDone }) {
   return (
     <div className="card space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-5xl font-black">{sale.ticket_no}</span>
+        <span className="text-4xl font-black md:text-5xl">{sale.ticket_no}</span>
         <StatusBadge status={sale.status} />
         <span className="ml-auto text-right text-sm text-gray-500">
           Paid {time(sale.created_at)} · {ghs(sale.total)}<br />Cashier: {sale.cashier}
@@ -169,7 +170,7 @@ function ServePanel({ sale, branchName, print, onChange, onServed, onDone }) {
       <div className="divide-y rounded-xl border">
         {sale.items.map(i => (
           <div key={i.id} className="flex items-center gap-3 p-3">
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <div className="text-lg font-bold">{i.name_snapshot}</div>
               <div className="text-sm text-gray-500">Paid {i.qty} · served {i.qty_served}</div>
             </div>

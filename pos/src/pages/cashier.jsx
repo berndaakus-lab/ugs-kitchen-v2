@@ -66,15 +66,18 @@ export default function Cashier() {
   }
 
   return (
-    <Layout me={me} right={
-      <button className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold hover:bg-white/20" onClick={() => setShowRecent(true)}>
-        Recent sales
+    <Layout fill me={me} right={
+      <button className="whitespace-nowrap rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold hover:bg-white/20" onClick={() => setShowRecent(true)}>
+        Recent<span className="hidden sm:inline"> sales</span>
       </button>
     }>
-      <div className="grid h-[calc(100vh-52px)] grid-cols-1 md:grid-cols-[1fr_380px]">
+      {/* Phone: menu on top, cart pinned at the bottom. md+: menu | cart side by side.
+          minmax(0,1fr) + min-w-0 stop a long category row from widening the menu
+          column and pushing the cart (and its pay buttons) off screen. */}
+      <div className="flex h-full flex-col md:grid md:grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* Menu */}
-        <section className="flex min-h-0 flex-col p-3">
-          <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col p-3">
+          <div className="no-scrollbar mb-3 flex shrink-0 gap-2 overflow-x-auto md:max-h-28 md:flex-wrap md:overflow-y-auto">
             {[{ id: 'all', name: 'All' }, ...menu.categories].map(c => (
               <button
                 key={c.id}
@@ -91,9 +94,9 @@ export default function Cashier() {
               <button
                 key={item.id}
                 onClick={() => add(item)}
-                className="card flex min-h-[88px] flex-col justify-between text-left transition hover:ring-2 hover:ring-brand-orange active:scale-[0.98]"
+                className="card flex min-h-[88px] min-w-0 flex-col justify-between text-left transition hover:ring-2 hover:ring-brand-orange active:scale-[0.98]"
               >
-                <span className="font-bold leading-tight">{item.name}</span>
+                <span className="break-words font-bold leading-tight">{item.name}</span>
                 <span className="mt-2 font-black text-brand-orange">{ghs(item.price)}</span>
               </button>
             ))}
@@ -102,50 +105,50 @@ export default function Cashier() {
         </section>
 
         {/* Cart */}
-        <aside className="flex min-h-0 flex-col border-l border-brand-muted bg-white">
+        <aside className={`flex min-h-0 min-w-0 shrink-0 flex-col border-t border-brand-muted bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.06)] md:max-h-none md:border-l md:border-t-0 md:shadow-none ${done ? 'max-h-[70%]' : 'max-h-[48%]'}`}>
           {done ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-4 text-center md:p-6">
               <div className="text-sm font-bold uppercase text-gray-500">Paid · give the customer ticket</div>
-              <div className="text-6xl font-black">{done.sale.ticket_no}</div>
+              <div className="text-5xl font-black md:text-6xl">{done.sale.ticket_no}</div>
               <div className="text-xl font-bold">{ghs(done.sale.total)}</div>
               {done.change > 0 && (
                 <div className="rounded-2xl bg-green-50 px-6 py-3 text-2xl font-black text-green-700">Change: {ghs(done.change)}</div>
               )}
-              <div className="mt-4 flex gap-2">
+              <div className="mt-2 flex flex-wrap justify-center gap-2 md:mt-4">
                 <button className="btn-ghost" onClick={() => reprint(done.sale, 'ticket')}><Printer size={18} /> Reprint ticket</button>
                 <button className="btn-primary" onClick={() => setDone(null)}>New sale</button>
               </div>
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between border-b p-3">
-                <h2 className="font-black">Current sale</h2>
+              <div className="flex shrink-0 items-center justify-between border-b px-3 py-2 md:py-3">
+                <h2 className="font-black">Current sale{cart.length > 0 && <span className="font-semibold text-gray-500"> · {cart.reduce((n, i) => n + i.qty, 0)} items</span>}</h2>
                 {cart.length > 0 && (
                   <button className="text-sm text-red-600" onClick={() => setCart([])}><Trash2 size={16} className="inline" /> Clear</button>
                 )}
               </div>
-              <div className="flex-1 overflow-y-auto">
+              <div className="min-h-0 flex-1 overflow-y-auto">
                 {cart.map(i => (
                   <div key={i.menu_item_id} className="flex items-center gap-2 border-b px-3 py-2">
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <div className="font-semibold leading-tight">{i.name}</div>
                       <div className="text-xs text-gray-500">{ghs(i.price)} each</div>
                     </div>
                     <button className="rounded-lg bg-brand-muted p-2" onClick={() => setQty(i.menu_item_id, i.qty - 1)}><Minus size={14} /></button>
                     <span className="w-6 text-center font-bold">{i.qty}</span>
                     <button className="rounded-lg bg-brand-muted p-2" onClick={() => setQty(i.menu_item_id, i.qty + 1)}><Plus size={14} /></button>
-                    <span className="w-24 whitespace-nowrap text-right font-bold">{ghs(i.price * i.qty)}</span>
+                    <span className="w-[5.5rem] whitespace-nowrap text-right font-bold">{ghs(i.price * i.qty)}</span>
                   </div>
                 ))}
-                {!cart.length && <div className="p-8 text-center text-gray-400">Tap items to add them.</div>}
+                {!cart.length && <div className="p-4 text-center text-gray-400 md:p-8">Tap items to add them.</div>}
               </div>
-              <div className="space-y-2 border-t p-3">
-                <div className="flex justify-between text-2xl font-black"><span>Total</span><span>{ghs(total)}</span></div>
+              <div className="shrink-0 space-y-2 border-t p-3">
+                <div className="flex justify-between text-xl font-black md:text-2xl"><span>Total</span><span>{ghs(total)}</span></div>
                 {/* The shop takes cash and MoMo prompt only. The API also accepts
                     momo_manual / card if they are ever needed again. */}
                 <div className="grid grid-cols-2 gap-2">
-                  <button className="btn-primary py-4 text-lg" disabled={!cart.length} onClick={() => setPaying('cash')}>Cash</button>
-                  <button className="btn-dark py-4 text-lg" disabled={!cart.length} onClick={() => setPaying('momo_paystack')}>MoMo</button>
+                  <button className="btn-primary py-3 text-lg md:py-4" disabled={!cart.length} onClick={() => setPaying('cash')}>Cash</button>
+                  <button className="btn-dark py-3 text-lg md:py-4" disabled={!cart.length} onClick={() => setPaying('momo_paystack')}>MoMo</button>
                 </div>
               </div>
             </>

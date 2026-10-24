@@ -33,7 +33,10 @@ function BranchSwitcher({ me }) {
   )
 }
 
-export default function Layout({ me, children, right }) {
+// `fill` = a full-screen work screen (Sell, Serve): the page is exactly the
+// window height and its panels scroll inside it, so the pay buttons and the
+// queue never slide off screen. Other pages scroll normally.
+export default function Layout({ me, children, right, fill }) {
   const router = useRouter()
   const [changingPin, setChangingPin] = useState(false)
 
@@ -43,26 +46,27 @@ export default function Layout({ me, children, right }) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex flex-wrap items-center gap-3 bg-brand-dark px-4 py-2 text-white">
+    <div className={`flex flex-col ${fill ? 'h-[100dvh] overflow-hidden' : 'min-h-[100dvh]'}`}>
+      {/* Phone: two rows (brand + actions, then a scrollable nav). md+: one row. */}
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-brand-dark px-3 py-2 text-white md:px-4">
         <div className="font-black text-brand-orange">UGs POS</div>
         {me && (me.user.role === 'admin'
           ? <BranchSwitcher me={me} />
-          : <div className="text-sm text-white/70">{me.user.branch_name}</div>)}
-        <nav className="flex gap-1">
+          : <div className="max-w-[40vw] truncate text-sm text-white/70">{me.user.branch_name}</div>)}
+        <nav className="no-scrollbar order-last -mx-1 flex w-full gap-1 overflow-x-auto md:order-none md:mx-0 md:w-auto">
           {me && NAV[me.user.role].map(([href, label]) => (
             <Link
               key={href}
               href={href}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${router.pathname === href ? 'bg-white/15' : 'hover:bg-white/10'}`}
+              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold ${router.pathname === href ? 'bg-white/15' : 'hover:bg-white/10'}`}
             >
               {label}
             </Link>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-1 sm:gap-3">
           {right}
-          {me && <span className="text-sm">{me.user.name} · <span className="capitalize text-white/70">{me.user.role}</span></span>}
+          {me && <span className="hidden text-sm lg:inline">{me.user.name} · <span className="capitalize text-white/70">{me.user.role}</span></span>}
           {me && (
             <button onClick={() => setChangingPin(true)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Change my PIN" title="Change my PIN">
               <KeyRound size={18} />
@@ -71,7 +75,7 @@ export default function Layout({ me, children, right }) {
           <button onClick={logout} className="rounded-lg p-2 hover:bg-white/10" aria-label="Log out" title="Log out"><LogOut size={18} /></button>
         </div>
       </header>
-      <main className="flex-1">{me ? children : <div className="p-8 text-center text-gray-400">Loading…</div>}</main>
+      <main className={`flex-1 ${fill ? 'min-h-0' : ''}`}>{me ? children : <div className="p-8 text-center text-gray-400">Loading…</div>}</main>
       {changingPin && <ChangePinModal onClose={() => setChangingPin(false)} />}
     </div>
   )
@@ -131,7 +135,7 @@ function ChangePinModal({ onClose }) {
 export function Modal({ title, onClose, children, wide }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className={`card max-h-[90vh] w-full overflow-y-auto ${wide ? 'max-w-2xl' : 'max-w-md'}`} onClick={e => e.stopPropagation()}>
+      <div className={`card max-h-[90dvh] w-full overflow-y-auto ${wide ? 'max-w-2xl' : 'max-w-md'}`} onClick={e => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-black">{title}</h2>
           {onClose && <button onClick={onClose} className="text-2xl leading-none text-gray-400 hover:text-black">×</button>}
