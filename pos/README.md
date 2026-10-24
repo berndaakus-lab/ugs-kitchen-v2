@@ -16,7 +16,7 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
 
 ## Setup
 
-1. Run `../migrations/pos_001_walkin.sql` in the Supabase SQL editor. It only adds new `pos_*` objects and is safe to re-run.
+1. Run `../migrations/pos_001_walkin.sql` and then `../migrations/pos_002_change_pin.sql` in the Supabase SQL editor. Paste each whole file and run it with nothing highlighted. They only add new `pos_*` objects and are safe to re-run.
 2. Create the owner's **admin** login once in the SQL editor. The owner must already exist in the online app's staff list:
    ```sql
    select pos_set_staff('<staff.id>', '<4-6 digit PIN>', 'admin', null);

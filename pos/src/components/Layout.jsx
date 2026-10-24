@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { LogOut } from 'lucide-react'
+import { KeyRound, LogOut } from 'lucide-react'
 import { api } from '@/lib/client'
 
 const NAV = {
@@ -35,6 +35,7 @@ function BranchSwitcher({ me }) {
 
 export default function Layout({ me, children, right }) {
   const router = useRouter()
+  const [changingPin, setChangingPin] = useState(false)
 
   async function logout() {
     await api('auth/logout', { method: 'POST' }).catch(() => {})
@@ -62,11 +63,68 @@ export default function Layout({ me, children, right }) {
         <div className="ml-auto flex items-center gap-3">
           {right}
           {me && <span className="text-sm">{me.user.name} · <span className="capitalize text-white/70">{me.user.role}</span></span>}
-          <button onClick={logout} className="rounded-lg p-2 hover:bg-white/10" aria-label="Log out"><LogOut size={18} /></button>
+          {me && (
+            <button onClick={() => setChangingPin(true)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Change my PIN" title="Change my PIN">
+              <KeyRound size={18} />
+            </button>
+          )}
+          <button onClick={logout} className="rounded-lg p-2 hover:bg-white/10" aria-label="Log out" title="Log out"><LogOut size={18} /></button>
         </div>
       </header>
       <main className="flex-1">{me ? children : <div className="p-8 text-center text-gray-400">Loading…</div>}</main>
+      {changingPin && <ChangePinModal onClose={() => setChangingPin(false)} />}
     </div>
+  )
+}
+
+function ChangePinModal({ onClose }) {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const digits = setter => e => setter(e.target.value.replace(/\D/g, '').slice(0, 6))
+
+  async function submit(e) {
+    e.preventDefault()
+    if (next !== confirmPin) return setError('The new PINs do not match.')
+    setBusy(true)
+    setError('')
+    try {
+      await api('auth/pin', { method: 'POST', body: { current_pin: current, new_pin: next } })
+      setDone(true)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (done) {
+    return (
+      <Modal title="PIN changed" onClose={onClose}>
+        <p className="mb-4 text-sm text-gray-600">Use your new PIN the next time you sign in.</p>
+        <button className="btn-primary w-full" onClick={onClose}>Done</button>
+      </Modal>
+    )
+  }
+
+  return (
+    <Modal title="Change my PIN" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <input className="input tracking-[0.4em]" type="password" inputMode="numeric" autoComplete="current-password"
+          placeholder="Current PIN" value={current} onChange={digits(setCurrent)} autoFocus />
+        <input className="input tracking-[0.4em]" type="password" inputMode="numeric" autoComplete="new-password"
+          placeholder="New PIN (4–6 digits)" value={next} onChange={digits(setNext)} />
+        <input className="input tracking-[0.4em]" type="password" inputMode="numeric" autoComplete="new-password"
+          placeholder="Repeat new PIN" value={confirmPin} onChange={digits(setConfirmPin)} />
+        <ErrorText>{error}</ErrorText>
+        <button className="btn-primary w-full" disabled={busy || current.length < 4 || next.length < 4 || confirmPin.length < 4}>
+          {busy ? 'Saving…' : 'Change PIN'}
+        </button>
+      </form>
+    </Modal>
   )
 }
 
