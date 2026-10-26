@@ -4,6 +4,7 @@ import { Minus, Plus, Printer, Receipt as ReceiptIcon, Trash2, X } from 'lucide-
 import Layout, { Modal, ErrorText, StatusBadge } from '@/components/Layout'
 import VoidModal from '@/components/VoidModal'
 import CustomerFields, { emptyCustomer, customerPayload, customerProblem } from '@/components/CustomerFields'
+import { OnlineOrderPanel, OnlineOrderSearch, useOnlineOrders } from '@/components/OnlineOrders'
 import { usePrinter } from '@/components/Print'
 import { api, ghs, time, uuid, useMe } from '@/lib/client'
 
@@ -19,6 +20,7 @@ export default function Cashier() {
   const [paying, setPaying] = useState(null)     // 'cash' | 'momo_paystack' | 'momo_manual' | 'card'
   const [done, setDone] = useState(null)         // { sale, change }
   const [showRecent, setShowRecent] = useState(false)
+  const [showOnline, setShowOnline] = useState(false)
   const [error, setError] = useState('')
 
   const branchName = me?.user.branch_name
@@ -52,15 +54,13 @@ export default function Cashier() {
     setCart(c => (qty <= 0 ? c.filter(i => i.menu_item_id !== id) : c.map(i => (i.menu_item_id === id ? { ...i, qty } : i))))
   }
 
-  function printTicket(sale) {
-    print('ticket', { ...sale, branch_name: branchName })
-  }
-
+  // One printer, at the cashier: print the food ticket (customer hands it to the
+  // server) and the customer's receipt together.
   function onPaid(sale, change = 0) {
     setPaying(null)
     setCart([])
     setDone({ sale, change })
-    printTicket(sale)
+    print('sale', { ...sale, branch_name: branchName })
   }
 
   if (me && !me.shift) {
@@ -72,9 +72,14 @@ export default function Cashier() {
 
   return (
     <Layout fill me={me} right={
-      <button className="whitespace-nowrap rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold hover:bg-white/20" onClick={() => setShowRecent(true)}>
-        Recent<span className="hidden sm:inline"> sales</span>
-      </button>
+      <>
+        <button className="whitespace-nowrap rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold hover:bg-white/20" onClick={() => setShowOnline(true)}>
+          Online<span className="hidden sm:inline"> orders</span>
+        </button>
+        <button className="whitespace-nowrap rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold hover:bg-white/20" onClick={() => setShowRecent(true)}>
+          Recent<span className="hidden sm:inline"> sales</span>
+        </button>
+      </>
     }>
       {/* Phone: menu on top, cart pinned at the bottom. md+: menu | cart side by side.
           minmax(0,1fr) + min-w-0 stop a long category row from widening the menu
@@ -113,7 +118,8 @@ export default function Cashier() {
         <aside className={`flex min-h-0 min-w-0 shrink-0 flex-col border-t border-brand-muted bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.06)] md:max-h-none md:border-l md:border-t-0 md:shadow-none ${done ? 'max-h-[70%]' : 'max-h-[48%]'}`}>
           {done ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-4 text-center md:p-6">
-              <div className="text-sm font-bold uppercase text-gray-500">Paid · give the customer ticket</div>
+              <div className="text-sm font-bold uppercase text-gray-500">Paid · give the customer both slips</div>
+              <div className="text-xs text-gray-500">Food ticket → hand to the server · Receipt → keep</div>
               <div className="text-5xl font-black md:text-6xl">{done.sale.ticket_no}</div>
               <div className="text-xl font-bold">{ghs(done.sale.total)}</div>
               {done.change > 0 && (
@@ -121,6 +127,7 @@ export default function Cashier() {
               )}
               <div className="mt-2 flex flex-wrap justify-center gap-2 md:mt-4">
                 <button className="btn-ghost" onClick={() => reprint(done.sale, 'ticket')}><Printer size={18} /> Reprint ticket</button>
+                <button className="btn-ghost" onClick={() => reprint(done.sale, 'receipt')}><ReceiptIcon size={18} /> Reprint receipt</button>
                 <button className="btn-primary" onClick={() => setDone(null)}>New sale</button>
               </div>
             </div>
@@ -174,9 +181,20 @@ export default function Cashier() {
         />
       )}
       {showRecent && <RecentSales onClose={() => setShowRecent(false)} onReprint={reprint} />}
+      {showOnline && <OnlineOrdersModal onClose={() => setShowOnline(false)} onPrint={printOnline} />}
       {slip}
     </Layout>
   )
+
+  // Receipt for a website order, printed here because the cashier has the printer.
+  async function printOnline(order) {
+    try {
+      const { order: fresh, printed_by } = await api(`online-orders/${order.id}/receipt`, { method: 'POST' })
+      print('online', { ...fresh, printed_by, branch_name: branchName })
+    } catch (err) {
+      alert(err.message)
+    }
+  }
 
   async function reprint(sale, kind) {
     try {
@@ -186,6 +204,25 @@ export default function Cashier() {
       alert(err.message)
     }
   }
+}
+
+function OnlineOrdersModal({ onClose, onPrint }) {
+  const online = useOnlineOrders()
+  const [selected, setSelected] = useState(null)
+  useEffect(() => { online.load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <Modal title={selected ? 'Online order' : 'Online orders'} onClose={onClose} wide>
+      {selected ? (
+        <div className="space-y-2">
+          <button className="text-sm font-semibold text-brand-brown" onClick={() => setSelected(null)}>← Back to list</button>
+          <OnlineOrderPanel order={selected} onPrint={() => onPrint(selected)} />
+        </div>
+      ) : (
+        <OnlineOrderSearch online={online} selected={selected} onSelect={setSelected} />
+      )}
+    </Modal>
+  )
 }
 
 // Admin switched branch while their shift (and its cash drawer) is open at another one.

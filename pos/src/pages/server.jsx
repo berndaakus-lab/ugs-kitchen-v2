@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Printer, ScanLine } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ScanLine } from 'lucide-react'
 import Layout, { ErrorText, StatusBadge } from '@/components/Layout'
-import { usePrinter } from '@/components/Print'
+import { OnlineOrderPanel, OnlineOrderRow, useOnlineOrders } from '@/components/OnlineOrders'
 import { api, ghs, time, useBranchEvents, useMe } from '@/lib/client'
 
 const ROLES = ['server']
 
+// "#A1B2C3" (online order no.) or a phone number → online order search.
+// A scanned QR is a sale id (UUID, which also contains many digits) → walk-in.
+const looksOnline = code => code.startsWith('#') || /^\+?[\d\s-]{9,}$/.test(code)
+
+// The serving point has no printer: the cashier prints the food ticket and the
+// customer's receipt together. The server scans the ticket, hands over the
+// food and keeps the ticket as proof of what was served.
 export default function Server() {
   const [me] = useMe(ROLES)
-  const { print, slip } = usePrinter()
+  const online = useOnlineOrders()
   const [queue, setQueue] = useState([])
+  const [tab, setTab] = useState('walkin')         // side list: 'walkin' | 'online'
   const [code, setCode] = useState('')
-  const [sale, setSale] = useState(null)
+  const [sale, setSale] = useState(null)           // open walk-in ticket
+  const [order, setOrder] = useState(null)         // open online order (view only)
   const [error, setError] = useState('')
   const inputRef = useRef()
 
@@ -22,30 +31,51 @@ export default function Server() {
     } catch { /* keep last queue */ }
   }, [])
 
-  useEffect(() => { if (me) loadQueue() }, [me, loadQueue])
-  useBranchEvents(me?.user.branch_id, () => loadQueue())
+  useEffect(() => { if (me) { loadQueue(); online.load() } }, [me]) // eslint-disable-line react-hooks/exhaustive-deps
+  useBranchEvents(me?.user.branch_id, () => {
+    loadQueue()
+    if (!online.query) online.load() // keep a search result on screen until cleared
+  }, 10000)
+
+  async function searchOnline(q) {
+    const found = await online.load(q)
+    setTab('online')
+    if (found.length === 1) { setSale(null); setOrder(found[0]) }
+    return found
+  }
 
   async function open(lookup) {
     setError('')
+    setCode('')
+    if (looksOnline(lookup)) {
+      const found = await searchOnline(lookup)
+      if (!found.length) setError(`No paid online order matches ${lookup}.`)
+      return
+    }
     try {
       const { sale } = await api(`sales/lookup?code=${encodeURIComponent(lookup)}`)
+      setOrder(null)
       setSale(sale)
     } catch (err) {
-      setSale(null)
-      setError(err.message)
+      // Not a walk-in ticket — it may be an online order number typed without "#".
+      const found = /^[0-9a-z]{3,}$/i.test(lookup) ? await searchOnline(lookup) : []
+      if (!found.length) {
+        setSale(null)
+        setError(err.message)
+      }
     }
-    setCode('')
   }
 
   function closed() {
     setSale(null)
+    setOrder(null)
     loadQueue()
     inputRef.current?.focus()
   }
 
   return (
     <Layout fill me={me}>
-      {/* Phone: ticket panel on top, queue below (capped). md+: side by side. */}
+      {/* Phone: ticket panel on top, lists below (capped). md+: side by side. */}
       <div className="flex h-full flex-col md:grid md:grid-cols-[minmax(0,1fr)_320px] lg:grid-cols-[minmax(0,1fr)_340px]">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
           {/* USB/Bluetooth scanners type the QR content followed by Enter. */}
@@ -55,7 +85,7 @@ export default function Server() {
               <input
                 ref={inputRef}
                 className="input pl-11 text-lg font-bold md:text-xl"
-                placeholder="Scan or type ticket no."
+                placeholder="Scan ticket, or #order / phone"
                 value={code}
                 onChange={e => setCode(e.target.value)}
                 autoFocus
@@ -64,34 +94,64 @@ export default function Server() {
             <button className="btn-dark px-4 md:px-6">Open</button>
           </form>
           <ErrorText>{error}</ErrorText>
-          {sale
-            ? <ServePanel sale={sale} branchName={me.user.branch_name} print={print} onChange={setSale} onServed={loadQueue} onDone={closed} />
-            : <div className="card p-10 text-center text-gray-400">Collect the customer's food ticket, then scan it or type its number.</div>}
+          {sale && <ServePanel sale={sale} onChange={setSale} onServed={loadQueue} onDone={closed} />}
+          {order && <OnlineOrderPanel order={order} onDone={closed} />}
+          {!sale && !order && (
+            <div className="card p-10 text-center text-gray-400">
+              Collect the customer's food ticket, then scan it or type its number.
+              <div className="mt-2 text-sm">Online order? Type its number (e.g. #00A1B2) or the customer's phone.</div>
+            </div>
+          )}
         </section>
 
         <aside className="max-h-[35%] min-h-0 min-w-0 shrink-0 overflow-y-auto border-t border-brand-muted bg-white md:max-h-none md:border-l md:border-t-0">
-          <div className="sticky top-0 border-b bg-white p-3 font-black">Waiting to be served ({queue.length})</div>
-          {queue.map(s => (
-            <button key={s.id} onClick={() => open(s.id)} className="flex w-full flex-col gap-1 border-b p-3 text-left hover:bg-brand-cream">
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-black">{s.ticket_no}</span>
-                <span className="text-xs text-gray-500">{time(s.created_at)}</span>
-                <span className="ml-auto"><StatusBadge status={s.status} /></span>
-              </div>
-              <div className="text-sm text-gray-600">
-                {s.items.map(i => `${i.qty - i.qty_served}× ${i.name_snapshot}`).filter(t => !t.startsWith('0×')).join(', ')}
-              </div>
-            </button>
-          ))}
-          {!queue.length && <div className="p-6 text-center text-gray-400">All caught up.</div>}
+          <div className="sticky top-0 z-10 flex border-b bg-white">
+            {[['walkin', `Walk-in (${queue.length})`], ['online', `Online (${online.orders.length})`]].map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => { setTab(k); if (k === 'online' && online.query) online.load() }}
+                className={`flex-1 p-3 text-sm font-black ${tab === k ? 'border-b-2 border-brand-orange text-brand-dark' : 'text-gray-400'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {tab === 'online' ? (
+            <>
+              {online.query && (
+                <button onClick={() => online.load()} className="w-full border-b bg-brand-cream p-2 text-xs font-semibold text-brand-brown">
+                  Showing results for “{online.query}” · show all today’s orders
+                </button>
+              )}
+              {online.orders.map(o => (
+                <OnlineOrderRow key={o.id} order={o} active={order?.id === o.id} onClick={() => { setSale(null); setOrder(o) }} />
+              ))}
+              {!online.orders.length && <div className="p-6 text-center text-gray-400">No paid online orders {online.query ? 'match' : 'yet today'}.</div>}
+            </>
+          ) : (
+            <>
+              {queue.map(s => (
+                <button key={s.id} onClick={() => open(s.id)} className="flex w-full flex-col gap-1 border-b p-3 text-left hover:bg-brand-cream">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl font-black">{s.ticket_no}</span>
+                    <span className="text-xs text-gray-500">{time(s.created_at)}</span>
+                    <span className="ml-auto"><StatusBadge status={s.status} /></span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {s.items.map(i => `${i.qty - i.qty_served}× ${i.name_snapshot}`).filter(t => !t.startsWith('0×')).join(', ')}
+                  </div>
+                </button>
+              ))}
+              {!queue.length && <div className="p-6 text-center text-gray-400">All caught up.</div>}
+            </>
+          )}
         </aside>
       </div>
-      {slip}
     </Layout>
   )
 }
 
-function ServePanel({ sale, branchName, print, onChange, onServed, onDone }) {
+function ServePanel({ sale, onChange, onServed, onDone }) {
   const remaining = i => i.qty - i.qty_served
   const [pick, setPick] = useState({})
   const [busy, setBusy] = useState(false)
@@ -103,8 +163,6 @@ function ServePanel({ sale, branchName, print, onChange, onServed, onDone }) {
     setError('')
   }, [sale])
 
-  const printReceipt = s => print('receipt', { ...s, branch_name: branchName })
-
   async function serve(all) {
     setBusy(true)
     setError('')
@@ -113,23 +171,11 @@ function ServePanel({ sale, branchName, print, onChange, onServed, onDone }) {
       const { sale: updated } = await api(`sales/${sale.id}/serve`, { method: 'POST', body })
       onChange(updated)
       onServed()
-      if (updated.status === 'served') {
-        setJustServed(updated.id)
-        printReceipt(updated)
-      }
+      if (updated.status === 'served') setJustServed(updated.id)
     } catch (err) {
       setError(err.message)
     } finally {
       setBusy(false)
-    }
-  }
-
-  async function reprintReceipt() {
-    try {
-      const { sale: s } = await api(`sales/${sale.id}/reprint`, { method: 'POST', body: { kind: 'receipt' } })
-      printReceipt(s)
-    } catch (err) {
-      setError(err.message)
     }
   }
 
@@ -157,7 +203,7 @@ function ServePanel({ sale, branchName, print, onChange, onServed, onDone }) {
       )}
       {sale.status === 'served' && justServed === sale.id && (
         <div className="flex items-center gap-2 rounded-xl bg-green-50 p-4 text-lg font-bold text-green-800">
-          <CheckCircle2 className="shrink-0" /> Served. Receipt printed — keep the food ticket.
+          <CheckCircle2 className="shrink-0" /> Served. Keep the food ticket.
         </div>
       )}
       {sale.status === 'served' && justServed !== sale.id && (
@@ -193,7 +239,7 @@ function ServePanel({ sale, branchName, print, onChange, onServed, onDone }) {
         {canServe && (
           <>
             <button className="btn-primary flex-1 py-4 text-lg" disabled={busy} onClick={() => serve(true)}>
-              Serve all &amp; print receipt
+              Serve all
             </button>
             <button
               className="btn-ghost"
@@ -203,9 +249,6 @@ function ServePanel({ sale, branchName, print, onChange, onServed, onDone }) {
               Serve selected only
             </button>
           </>
-        )}
-        {sale.status === 'served' && (
-          <button className="btn-ghost" onClick={reprintReceipt}><Printer size={18} /> Reprint receipt</button>
         )}
         <button className="btn-ghost" onClick={onDone}>Done</button>
       </div>

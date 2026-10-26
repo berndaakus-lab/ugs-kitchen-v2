@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "UGs Kitchen POS",
+  "short_name": "UGs POS",
+  "description": "Walk-in sales, serving and reports for UGs Kitchen staff",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FFF8F0",
+  "theme_color": "#151212",
+  "categories": ["business", "food"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

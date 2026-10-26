@@ -10,7 +10,7 @@ export function usePrinter() {
   const [job, setJob] = useState(null)
 
   const print = useCallback(async (kind, data) => {
-    const qr = kind === 'ticket' ? await QRCode.toDataURL(data.id, { margin: 0, width: 160 }) : null
+    const qr = ['ticket', 'sale'].includes(kind) ? await QRCode.toDataURL(data.id, { margin: 0, width: 160 }) : null
     setJob({ kind, data, qr, at: Date.now() })
   }, [])
 
@@ -23,8 +23,12 @@ export function usePrinter() {
 
   const slip = job && (
     <div id="print-root">
+      {/* At payment: food ticket (for the server) + receipt (for the customer)
+          in one job, each on its own page so the printer cuts/tears between. */}
+      {job.kind === 'sale'    && <><Ticket sale={job.data} qr={job.qr} /><Receipt sale={job.data} /></>}
       {job.kind === 'ticket'  && <Ticket sale={job.data} qr={job.qr} />}
       {job.kind === 'receipt' && <Receipt sale={job.data} />}
+      {job.kind === 'online'  && <OnlineReceipt order={job.data} />}
       {job.kind === 'zreport' && <ZReport report={job.data} />}
       {job.kind === 'served'  && <ServedReport report={job.data} />}
     </div>
@@ -102,6 +106,30 @@ export function Receipt({ sale }) {
       <div className="text-xs">Cashier: {sale.cashier}</div>
       {sale.served_by && <div className="text-xs">Served by: {sale.served_by}</div>}
       <div className="mt-2 text-center text-sm font-bold">Thank you! Enjoy your meal.</div>
+    </div>
+  )
+}
+
+// Receipt for an order placed on the website (paid by MoMo through Paystack).
+export function OnlineReceipt({ order }) {
+  return (
+    <div className="slip">
+      <Head branch={order.branch_name} title="RECEIPT · ONLINE ORDER" />
+      <Row left={`Order ${order.order_no}`} right={dateTime(order.paid_at || order.created_at)} />
+      <div className="text-xs">Customer: {[order.customer, maskPhone(order.phone)].filter(Boolean).join(' · ')}</div>
+      <div className="text-xs">{order.is_pickup ? 'Pick-up' : `Delivery: ${order.location}`}</div>
+      <Rule />
+      {order.items.map(i => (
+        <Row key={i.key} left={`${i.qty} × ${i.name}`} right={ghs(i.qty * i.price)} />
+      ))}
+      <Rule />
+      <Row left="TOTAL" right={ghs(order.total)} bold />
+      <Row left="Paid online (MoMo)" right={ghs(order.total)} />
+      {order.notes && <div className="mt-1 text-xs">Note: {order.notes}</div>}
+      <Rule />
+      <div className="text-xs">Printed by: {order.printed_by}</div>
+      <div className="mt-2 text-center text-sm font-bold">Thank you for ordering online!</div>
+      <div className="text-center text-xs">ugskitchen.com</div>
     </div>
   )
 }
