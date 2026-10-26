@@ -21,7 +21,7 @@ export async function rpc(fn, args) {
 export async function loadSale(saleId) {
   const { data: sale, error } = await db
     .from('pos_sales')
-    .select('*, pos_sale_items(*), pos_payments(*)')
+    .select('*, pos_sale_items(*), pos_payments(*), pos_customers(name, phone)')
     .eq('id', saleId)
     .single()
   if (error) throw error
@@ -29,9 +29,10 @@ export async function loadSale(saleId) {
   const staffIds = [sale.cashier_id, sale.served_by_id, sale.voided_by_id].filter(Boolean)
   const names = await staffNames(staffIds)
 
-  const { pos_sale_items, pos_payments, ...rest } = sale
+  const { pos_sale_items, pos_payments, pos_customers, ...rest } = sale
   return {
     ...rest,
+    customer:    pos_customers || null,
     items:       (pos_sale_items || []).sort((a, b) => a.name_snapshot.localeCompare(b.name_snapshot)),
     payments:    (pos_payments || []).sort((a, b) => a.created_at.localeCompare(b.created_at)),
     cashier:     names[sale.cashier_id] || null,

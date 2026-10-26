@@ -14,9 +14,22 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
    - Voids: always need a manager PIN, only before any food is served, and are logged.
    - POS staff logins (`/manager/staff`).
 
+## Walk-in customers and reviews
+
+- **Phone number:** the cashier types the customer's phone (optional). For MoMo, the MoMo number is used.
+- **Name:** never asked. It comes from a previous visit, or from the name registered on the MoMo wallet, looked up through Paystack.
+- **Promo consent:** a separate tick box, off by default. The consent date is stored. **Customers** (manager/admin) exports only customers who agreed, as a CSV file.
+- **Review SMS:** as soon as a sale is paid (cash, or MoMo once confirmed), the customer gets one thank-you SMS. It has a review link to `/review` on this app, valid for 24 hours. Reviews are saved in the same `reviews` table as online reviews.
+
 ## Setup
 
-1. Run `../migrations/pos_001_walkin.sql` and then `../migrations/pos_002_change_pin.sql` in the Supabase SQL editor. Paste each whole file and run it with nothing highlighted. They only add new `pos_*` objects and are safe to re-run.
+1. Run the migrations in the Supabase SQL editor, in this order. Paste each whole file and run it with nothing highlighted. Each one is safe to re-run.
+   1. `../migrations/pos_001_walkin.sql`
+   2. `../migrations/pos_002_change_pin.sql`
+   3. `../migrations/pos_003_customers.sql`
+   4. `../migrations/pos_004_walkin_reviews.sql`
+
+   They add only new `pos_*` objects, with one exception: `pos_004` adds an optional `pos_sale_id` column to the online `reviews` table. That's how walk-in reviews appear in the online admin and on the website.
 2. Create the owner's **admin** login once in the SQL editor. The owner must already exist in the online app's staff list:
    ```sql
    select pos_set_staff('<staff.id>', '<4-6 digit PIN>', 'admin', null);

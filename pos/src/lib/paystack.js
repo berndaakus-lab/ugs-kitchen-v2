@@ -15,6 +15,34 @@ export function detectNetwork(phone) {
   return 'mtn'
 }
 
+// Paystack's codes for Ghana mobile money networks (GET /bank?currency=GHS&type=mobile_money)
+const NETWORK_CODES = { mtn: 'MTN', vod: 'VOD', tgo: 'ATL' }
+
+// "KWAME  MENSAH" → "Kwame Mensah"
+export const titleCase = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\b\p{L}/gu, c => c.toUpperCase())
+
+// The name registered on a MoMo wallet, via Paystack's Resolve Account Number.
+// Returns null if Paystack can't or won't resolve it (never throws).
+export async function resolveMomoName(phone) {
+  try {
+    const { data } = await api().get('/bank/resolve', {
+      params: { account_number: phone, bank_code: NETWORK_CODES[detectNetwork(phone)] },
+      timeout: 5000,
+    })
+    return data?.data?.account_name ? titleCase(data.data.account_name) : null
+  } catch (err) {
+    console.warn('[paystack] name lookup unavailable:', err.response?.data?.message || err.message)
+    return null
+  }
+}
+
+// Some MoMo charges carry the payer's wallet name; use it when we have no name yet.
+export function nameFromCharge(charge) {
+  const n = charge?.authorization?.account_name ||
+    [charge?.customer?.first_name, charge?.customer?.last_name].filter(Boolean).join(' ')
+  return n ? titleCase(n) : null
+}
+
 export function toPesewas(ghs) {
   return Math.round(parseFloat(ghs) * 100)
 }

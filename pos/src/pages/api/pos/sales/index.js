@@ -1,6 +1,8 @@
 import { db, rpc, loadSale, staffNames, today } from '@/lib/supabaseAdmin'
 import { withAuth, isElevated } from '@/lib/session'
 import { broadcast } from '@/lib/broadcast'
+import { parseCustomer, attachCustomer } from '@/lib/customers'
+import { sendReviewSms } from '@/lib/reviewSms'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DIRECT_METHODS = ['cash', 'momo_manual', 'card']
@@ -11,13 +13,16 @@ export default withAuth(async (req, res) => {
   return res.status(405).json({ message: 'Method not allowed' })
 })
 
-// POST { client_ref, items: [{menu_item_id, qty}], payments: [{method, amount, tendered?, reference?}] }
+// POST { client_ref, items: [{menu_item_id, qty}], payments: [{method, amount, tendered?, reference?}],
+//        customer?: {phone, name?, opt_in?} }
 async function createSale(req, res) {
   if (req.user.role !== 'cashier' && !isElevated(req.user.role)) {
     return res.status(403).json({ message: 'Only cashiers can take payments.' })
   }
 
   const { client_ref, items, payments } = req.body || {}
+  const { customer, error: customerError } = parseCustomer(req.body?.customer)
+  if (customerError) return res.status(400).json({ message: customerError })
   if (!UUID.test(client_ref || '')) return res.status(400).json({ message: 'Missing client_ref.' })
   if (!Array.isArray(items) || !items.length) return res.status(400).json({ message: 'Cart is empty.' })
   if (!Array.isArray(payments) || !payments.length) return res.status(400).json({ message: 'Add a payment.' })
@@ -43,6 +48,10 @@ async function createSale(req, res) {
     })),
     p_status: 'paid',
   })
+
+  // The money is already taken: a problem saving the customer must not fail the sale.
+  await attachCustomer(saleId, customer).catch(err => console.error('[pos] attach customer', err.message))
+  await sendReviewSms(req, saleId) // paid now (cash): text the review link; sent once per sale
 
   const sale = await loadSale(saleId)
   await broadcast(req.user.branch_id, 'sale_paid', { id: sale.id, ticket_no: sale.ticket_no })

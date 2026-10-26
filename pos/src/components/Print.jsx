@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { ghs, dateTime, METHOD_LABEL, shownMethods } from '@/lib/client'
+import { maskPhone } from '@/lib/phone'
 
 export function usePrinter() {
   const [job, setJob] = useState(null)
@@ -50,12 +51,20 @@ const Row = ({ left, right, bold }) => (
 
 const Rule = () => <div className="my-1 border-t border-dashed border-black" />
 
+// Name + masked phone, so a dropped slip doesn't expose the customer's number.
+function CustomerLine({ customer, center }) {
+  if (!customer) return null
+  const who = [customer.name, maskPhone(customer.phone)].filter(Boolean).join(' · ')
+  return <div className={`text-xs ${center ? 'text-center' : ''}`}>Customer: {who}</div>
+}
+
 export function Ticket({ sale, qr }) {
   return (
     <div className="slip">
       <Head branch={sale.branch_name} title="FOOD TICKET" />
       <div className="my-2 text-center text-5xl font-black">{sale.ticket_no}</div>
       <div className="text-center text-xs">{dateTime(sale.created_at)} · Cashier: {sale.cashier}</div>
+      <CustomerLine customer={sale.customer} center />
       <Rule />
       {sale.items.map(i => (
         <div key={i.id} className="flex gap-2 text-base font-bold">
@@ -75,6 +84,7 @@ export function Receipt({ sale }) {
     <div className="slip">
       <Head branch={sale.branch_name} title="RECEIPT" />
       <Row left={`Ticket ${sale.ticket_no}`} right={dateTime(sale.created_at)} />
+      <CustomerLine customer={sale.customer} />
       <Rule />
       {sale.items.map(i => (
         <Row key={i.id} left={`${i.qty} × ${i.name_snapshot}`} right={ghs(i.qty * i.unit_price)} />

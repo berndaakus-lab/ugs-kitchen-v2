@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Minus, Plus, Printer, Receipt as ReceiptIcon, Trash2, X } from 'lucide-react'
 import Layout, { Modal, ErrorText, StatusBadge } from '@/components/Layout'
 import VoidModal from '@/components/VoidModal'
+import CustomerFields, { emptyCustomer, customerPayload, customerProblem } from '@/components/CustomerFields'
 import { usePrinter } from '@/components/Print'
 import { api, ghs, time, uuid, useMe } from '@/lib/client'
 
@@ -244,8 +245,10 @@ const TITLES = { cash: 'Cash payment', momo_paystack: 'MoMo prompt', momo_manual
 function PayModal({ method, cart, total, clientRef, newClientRef, onClose, onPaid, onMenuStale }) {
   const [tendered, setTendered] = useState('')
   const [reference, setReference] = useState('')
+  const [customer, setCustomer] = useState(emptyCustomer)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const customerError = customerProblem(customer)
 
   const items = cart.map(i => ({ menu_item_id: i.menu_item_id, qty: i.qty }))
   const change = Number(tendered || 0) - total
@@ -259,7 +262,10 @@ function PayModal({ method, cart, total, clientRef, newClientRef, onClose, onPai
       const payment = method === 'cash'
         ? { method, amount: total, tendered: Number(tendered) }
         : { method, amount: total, reference }
-      const { sale } = await api('sales', { method: 'POST', body: { client_ref: clientRef, items, payments: [payment] } })
+      const { sale } = await api('sales', {
+        method: 'POST',
+        body: { client_ref: clientRef, items, payments: [payment], customer: customerPayload(customer) },
+      })
       onPaid(sale, method === 'cash' ? change : 0)
     } catch (err) {
       if (err.code === 'ITEM_UNAVAILABLE') onMenuStale()
@@ -274,13 +280,14 @@ function PayModal({ method, cart, total, clientRef, newClientRef, onClose, onPai
         <MomoPrompt items={items} clientRef={clientRef} newClientRef={newClientRef} onPaid={onPaid} onClose={onClose} />
       ) : (
         <form onSubmit={payDirect} className="space-y-3">
+          <CustomerFields value={customer} onChange={setCustomer} />
           {method === 'cash' ? (
             <>
               <label className="block text-sm font-semibold">Cash received</label>
               <input
                 className="input text-2xl font-bold"
                 type="number" min={total} step="0.01" inputMode="decimal"
-                value={tendered} onChange={e => setTendered(e.target.value)} autoFocus
+                value={tendered} onChange={e => setTendered(e.target.value)}
               />
               <div className="flex flex-wrap gap-2">
                 {quick.map(v => (
@@ -298,14 +305,14 @@ function PayModal({ method, cart, total, clientRef, newClientRef, onClose, onPai
               <label className="block text-sm font-semibold">
                 {method === 'card' ? 'Card terminal approval / reference' : 'MoMo transaction ID'}
               </label>
-              <input className="input" value={reference} onChange={e => setReference(e.target.value)} autoFocus />
+              <input className="input" value={reference} onChange={e => setReference(e.target.value)} />
               <p className="text-xs text-gray-500">Confirm the money has arrived before continuing.</p>
             </>
           )}
-          <ErrorText>{error}</ErrorText>
+          <ErrorText>{error || customerError}</ErrorText>
           <button
             className="btn-primary w-full py-4 text-lg"
-            disabled={busy || (method === 'cash' ? !(change >= 0 && tendered) : !reference.trim())}
+            disabled={busy || Boolean(customerError) || (method === 'cash' ? !(change >= 0 && tendered) : !reference.trim())}
           >
             {busy ? 'Saving…' : 'Confirm & print ticket'}
           </button>
@@ -317,6 +324,7 @@ function PayModal({ method, cart, total, clientRef, newClientRef, onClose, onPai
 
 function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
   const [phone, setPhone] = useState('')
+  const [customer, setCustomer] = useState(emptyCustomer) // phone comes from the MoMo number
   const [otp, setOtp] = useState('')
   const [state, setState] = useState({ step: 'phone' }) // phone | waiting | failed
   const [busy, setBusy] = useState(false)
@@ -354,7 +362,10 @@ function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
     e.preventDefault()
     setBusy(true)
     try {
-      const r = await api('payments/momo-initiate', { method: 'POST', body: { client_ref: clientRef, items, phone } })
+      const r = await api('payments/momo-initiate', {
+        method: 'POST',
+        body: { client_ref: clientRef, items, phone, customer: { name: customer.name.trim(), opt_in: customer.opt_in } },
+      })
       if (r.status === 'success') {
         const { sale } = await api(`payments/momo-verify?sale_id=${r.sale_id}`)
         return onPaid(sale)
@@ -396,6 +407,7 @@ function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
           className="input text-xl tracking-wider" inputMode="tel" placeholder="024XXXXXXX"
           value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} autoFocus
         />
+        <CustomerFields value={customer} onChange={setCustomer} phone={phone} hidePhone />
         {state.step === 'failed' && <ErrorText>{state.message}</ErrorText>}
         <button className="btn-primary w-full py-4" disabled={busy || phone.length !== 10}>
           {busy ? 'Sending…' : state.step === 'failed' ? 'Try again' : 'Send payment prompt'}
