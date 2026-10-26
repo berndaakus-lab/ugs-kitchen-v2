@@ -4,8 +4,12 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
 
 ## Walk-in flow
 
-1. **Cashier** (`/cashier`): picks items and takes payment by cash or MoMo prompt (Paystack). The API still supports a MoMo reference or card if the shop needs them later. This prints a **food ticket** with a daily number (`W-001`…) and a QR code.
-2. **Server** (`/server`): scans the QR or types the number, then serves all or part of the order. When the order is fully served, the **receipt** prints. The server keeps the paper ticket. If someone presents a ticket that was already used or voided, the server sees a red-flag warning.
+1. **Cashier** (`/cashier`): picks items and takes payment by cash or MoMo prompt (Paystack). The API still supports a MoMo reference or card if the shop needs them later.
+   - Payment prints **two slips in one go**: the **food ticket** (daily number `W-001`… and a QR code) and the customer's **receipt**. Each slip is on its own page, so the printer cuts or the cashier tears between them.
+   - The customer keeps the receipt and hands the ticket to the server.
+   - The cashier screen has the only printer. Its **Online orders** button finds website orders by number or phone and prints their receipts.
+2. **Server** (`/server`): scans the QR or types the number, then serves all or part of the order. The server keeps the paper ticket. If someone presents a ticket that was already used or voided, the server sees a red-flag warning.
+   - The server also sees today's **online orders**, view only. The serving point doesn't print.
 3. **Shift** (`/shift`):
    - Cashiers open a shift with a cash float and close it with a cash count. This prints a Z-report showing expected cash, counted cash, and the variance.
    - Servers see a report of what they served, to check against the tickets they collected.
@@ -58,11 +62,11 @@ The POS can be installed like an app, with its own icon and a full-screen window
 
 The service worker (`public/sw.js`) only makes the app installable and shows `offline.html` when the connection drops. It does **not** cache menus, sales or prices, and you can't sell offline.
 
-Use the installed app for managers and the admin. On the **cashier and server PCs**, keep the Chrome shortcut with `--kiosk-printing` below: an installed app can't use that setting, so every ticket would show the print dialog.
+Use the installed app for managers, the admin and the server's screen. On the **cashier PC**, keep the Chrome shortcut with `--kiosk-printing` below: an installed app can't use that setting, so every print would show the print dialog.
 
 ## Printing
 
-The POS is built for 80mm thermal printers. Install the printer's Windows driver and set it as the default printer. Then start Chrome on each POS PC in kiosk-printing mode so tickets and receipts print without a dialog:
+There's **one 80mm thermal printer, at the cashier**. Install its Windows driver and set it as the default printer. Then start Chrome on the cashier PC in kiosk-printing mode, so the ticket and receipt print without a dialog. If the printer has an auto-cutter, it cuts between the two slips; otherwise tear at the gap.
 
 ```
 chrome.exe --kiosk-printing --app=https://<pos-domain>/cashier

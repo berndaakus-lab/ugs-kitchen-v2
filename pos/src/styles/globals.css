@@ -44,6 +44,12 @@
     background: #fff;
     color: #000;
   }
+  /* Ticket + receipt printed together: start each slip on a new page so the
+     printer cuts (or the cashier tears) between them. */
+  .slip + .slip {
+    break-before: page;
+    page-break-before: always;
+  }
   .slip {
     padding: 3mm 4mm;
     font-size: 12px;
