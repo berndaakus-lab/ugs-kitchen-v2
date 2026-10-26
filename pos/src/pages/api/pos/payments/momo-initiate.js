@@ -1,20 +1,25 @@
 import { db, rpc, loadSale } from '@/lib/supabaseAdmin'
 import { withAuth } from '@/lib/session'
 import { chargeMomo, paystackError } from '@/lib/paystack'
+import { normalizePhone } from '@/lib/phone'
+import { parseCustomer, attachCustomer } from '@/lib/customers'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// POST { client_ref, items: [{menu_item_id, qty}], phone }
+// POST { client_ref, items: [{menu_item_id, qty}], phone, customer?: {phone?, name?, opt_in?} }
 // Creates the sale as pending_payment (ticket number reserved) and sends the
 // MoMo prompt. The cashier screen then polls momo-verify.
+// The customer's phone defaults to the MoMo number.
 export default withAuth(async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
 
   const { client_ref, items, phone } = req.body || {}
-  const cleanPhone = String(phone || '').replace(/\s/g, '')
+  const cleanPhone = normalizePhone(phone)
   if (!UUID.test(client_ref || '')) return res.status(400).json({ message: 'Missing client_ref.' })
-  if (!/^0[0-9]{9}$/.test(cleanPhone)) return res.status(400).json({ message: 'Enter a valid 10-digit MoMo number.' })
+  if (!cleanPhone) return res.status(400).json({ message: 'Enter a valid 10-digit MoMo number.' })
   if (!Array.isArray(items) || !items.length) return res.status(400).json({ message: 'Cart is empty.' })
+  const { customer, error: customerError } = parseCustomer({ ...req.body?.customer, phone: req.body?.customer?.phone || cleanPhone })
+  if (customerError) return res.status(400).json({ message: customerError })
 
   const saleId = await rpc('pos_create_sale', {
     p_branch:     req.user.branch_id,
@@ -24,6 +29,7 @@ export default withAuth(async (req, res) => {
     p_payments:   [],
     p_status:     'pending_payment',
   })
+  await attachCustomer(saleId, customer).catch(err => console.error('[pos] attach customer', err.message))
   const sale = await loadSale(saleId)
 
   // Retry of a request that already went through.

@@ -73,6 +73,7 @@ const DB_MESSAGES = {
   OVER_SERVE:         [409, 'Cannot serve more than was paid for.'],
   CANNOT_VOID_SERVED: [409, 'Food has already been served on this ticket — it cannot be voided.'],
   CANNOT_VOID:        [409, 'This sale cannot be voided.'],
+  INVALID_PHONE:      [400, 'Enter a valid 10-digit phone number.'],
 }
 
 export function sendDbError(res, err) {

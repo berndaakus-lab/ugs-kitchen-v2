@@ -7,7 +7,7 @@ import { api } from '@/lib/client'
 const NAV = {
   cashier: [['/cashier', 'Sell'], ['/shift', 'My shift']],
   server:  [['/server', 'Serve'], ['/shift', 'My report']],
-  manager: [['/manager', 'Today'], ['/cashier', 'Sell'], ['/server', 'Serve'], ['/shift', 'My shift'], ['/manager/staff', 'Staff']],
+  manager: [['/manager', 'Today'], ['/cashier', 'Sell'], ['/server', 'Serve'], ['/shift', 'My shift'], ['/manager/customers', 'Customers'], ['/manager/staff', 'Staff']],
 }
 NAV.admin = NAV.manager
 
