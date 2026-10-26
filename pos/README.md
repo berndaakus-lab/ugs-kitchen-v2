@@ -48,6 +48,18 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
 
 Create a **new** Vercel project from this repo with **Root Directory = `pos`**, then add the env vars above. The online app's project is not affected.
 
+## Install as an app (PWA)
+
+The POS can be installed like an app, with its own icon and a full-screen window:
+
+- **Android (Chrome):** open `https://pos.ugskitchen.com`, then **⋮ → Install app** (or **Add to Home screen**).
+- **iPhone (Safari):** **Share → Add to Home Screen**.
+- **Windows/Mac (Chrome or Edge):** click the install icon in the address bar.
+
+The service worker (`public/sw.js`) only makes the app installable and shows `offline.html` when the connection drops. It does **not** cache menus, sales or prices, and you can't sell offline.
+
+Use the installed app for managers and the admin. On the **cashier and server PCs**, keep the Chrome shortcut with `--kiosk-printing` below: an installed app can't use that setting, so every ticket would show the print dialog.
+
 ## Printing
 
 The POS is built for 80mm thermal printers. Install the printer's Windows driver and set it as the default printer. Then start Chrome on each POS PC in kiosk-printing mode so tickets and receipts print without a dialog:
