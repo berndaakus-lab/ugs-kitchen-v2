@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Printer } from 'lucide-react'
 import Layout, { ErrorText, Stat } from '@/components/Layout'
 import { usePrinter } from '@/components/Print'
-import { api, ghs, dateTime, METHOD_LABEL, shownMethods, useMe } from '@/lib/client'
+import { api, ghs, dateTime, METHOD_LABEL, shownMethods, hasRole, userRoles, useMe } from '@/lib/client'
 
 export default function Shift() {
   const [me, reloadMe] = useMe()
@@ -10,10 +10,10 @@ export default function Shift() {
 
   return (
     <Layout me={me}>
+      {/* Someone who is both cashier and server sees both: their cash shift and what they served. */}
       <div className="mx-auto max-w-2xl space-y-4 p-4">
-        {me?.user.role === 'server'
-          ? <ServerReport print={print} />
-          : <CashierShift me={me} reloadMe={reloadMe} print={print} />}
+        {me && hasRole(me.user, 'cashier') && <CashierShift me={me} reloadMe={reloadMe} print={print} />}
+        {me && userRoles(me.user).includes('server') && <ServerReport print={print} />}
       </div>
       {slip}
     </Layout>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import Layout, { Modal, ErrorText } from '@/components/Layout'
-import { api, useMe } from '@/lib/client'
+import { api, roleLabel, useMe } from '@/lib/client'
 
 const ROLES = ['manager']
 
@@ -29,7 +29,7 @@ export default function StaffPage() {
                 <div className="font-bold">{s.name} <span className="text-sm font-normal text-gray-500">@{s.username}</span></div>
                 <div className="text-sm text-gray-500">
                   {s.pos
-                    ? <>POS: <b className="capitalize">{s.pos.pos_role}</b>{!s.pos.is_active && ' · disabled'}{s.pos.locked_until && new Date(s.pos.locked_until) > new Date() && ' · locked (wrong PINs)'}</>
+                    ? <>POS: <b>{roleLabel(s.pos.pos_roles)}</b>{!s.pos.is_active && ' · disabled'}{s.pos.locked_until && new Date(s.pos.locked_until) > new Date() && ' · locked (wrong PINs)'}</>
                     : 'No POS access'}
                 </div>
               </div>
@@ -44,8 +44,23 @@ export default function StaffPage() {
   )
 }
 
+const ROLE_HINT = {
+  cashier: 'Sells and takes payments',
+  server:  'Hands over food',
+  manager: 'Every screen at this branch',
+  admin:   'Every screen at every branch',
+}
+
+// Cashier and server can be combined (one person doing both). Manager and
+// admin already open every screen, so picking one of them clears the rest.
+function toggleRole(current, r) {
+  if (r === 'manager' || r === 'admin') return current.includes(r) ? [] : [r]
+  const base = current.filter(x => x === 'cashier' || x === 'server')
+  return base.includes(r) ? base.filter(x => x !== r) : [...base, r]
+}
+
 function EditStaff({ person, roles, onClose, onSaved }) {
-  const [role, setRole] = useState(person.pos?.pos_role || 'cashier')
+  const [picked, setPicked] = useState(person.pos?.pos_roles || ['cashier'])
   const [pin, setPin] = useState('')
   const [active, setActive] = useState(person.pos ? person.pos.is_active : true)
   const [error, setError] = useState('')
@@ -55,7 +70,7 @@ function EditStaff({ person, roles, onClose, onSaved }) {
     e.preventDefault()
     setBusy(true)
     try {
-      await api('manager/staff', { method: 'POST', body: { staff_id: person.id, role, pin: pin || undefined, is_active: active } })
+      await api('manager/staff', { method: 'POST', body: { staff_id: person.id, roles: picked, pin: pin || undefined, is_active: active } })
       onSaved()
     } catch (err) {
       setError(err.message)
@@ -66,12 +81,23 @@ function EditStaff({ person, roles, onClose, onSaved }) {
   return (
     <Modal title={person.name} onClose={onClose}>
       <form onSubmit={save} className="space-y-3">
-        <label className="block text-sm font-semibold">POS role</label>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {roles.map(r => (
-            <button type="button" key={r} onClick={() => setRole(r)}
-              className={`btn capitalize ${role === r ? 'bg-brand-dark text-white' : 'border border-brand-muted bg-white'}`}>{r}</button>
-          ))}
+        <label className="block text-sm font-semibold">
+          POS roles <span className="font-normal text-gray-500">(tick both Cashier and Server for someone who does both)</span>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          {roles.map(r => {
+            const on = picked.includes(r)
+            return (
+              <button type="button" key={r} onClick={() => setPicked(p => toggleRole(p, r))} aria-pressed={on}
+                className={`flex items-start gap-2 rounded-xl border p-3 text-left ${on ? 'border-brand-dark bg-brand-dark text-white' : 'border-brand-muted bg-white'}`}>
+                <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] ${on ? 'border-white bg-white text-brand-dark' : 'border-gray-400'}`}>{on ? '✓' : ''}</span>
+                <span>
+                  <span className="block font-bold capitalize">{r}</span>
+                  <span className={`block text-xs ${on ? 'text-white/70' : 'text-gray-500'}`}>{ROLE_HINT[r]}</span>
+                </span>
+              </button>
+            )
+          })}
         </div>
         <label className="block text-sm font-semibold">{person.pos ? 'New PIN (leave blank to keep)' : 'PIN (4–6 digits)'}</label>
         <input className="input tracking-[0.4em]" type="password" inputMode="numeric" value={pin}
@@ -82,7 +108,7 @@ function EditStaff({ person, roles, onClose, onSaved }) {
           </label>
         )}
         <ErrorText>{error}</ErrorText>
-        <button className="btn-primary w-full" disabled={busy || (!person.pos && pin.length < 4)}>{busy ? 'Saving…' : 'Save'}</button>
+        <button className="btn-primary w-full" disabled={busy || !picked.length || (!person.pos && pin.length < 4)}>{busy ? 'Saving…' : 'Save'}</button>
       </form>
     </Modal>
   )

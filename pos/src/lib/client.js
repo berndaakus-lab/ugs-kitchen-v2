@@ -48,7 +48,7 @@ export function useMe(roles) {
   const reload = useCallback(async () => {
     try {
       const data = await api('auth/me')
-      if (roles && !isElevated(data.user.role) && !roles.includes(data.user.role)) {
+      if (roles && !roles.some(r => hasRole(data.user, r))) {
         router.replace(homeFor(data.user.role))
         return
       }
@@ -63,6 +63,13 @@ export function useMe(roles) {
 }
 
 export const isElevated = role => role === 'manager' || role === 'admin'
+
+// A person can have several roles (e.g. cashier + server). `role` is the main
+// one; sessions from before multi-role carry only `role`.
+export const userRoles = user => (user?.roles?.length ? user.roles : [user?.role].filter(Boolean))
+export const hasRole = (user, role) => isElevated(user?.role) || userRoles(user).includes(role)
+export const roleLabel = roles =>
+  (roles || []).map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(' + ')
 
 export function homeFor(role) {
   return { cashier: '/cashier', server: '/server', manager: '/manager', admin: '/manager' }[role] || '/login'

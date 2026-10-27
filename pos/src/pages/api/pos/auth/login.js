@@ -32,7 +32,8 @@ export default async function handler(req, res) {
       sid:         match.pos_staff_id,
       staff_id:    match.staff_id,
       name:        match.name,
-      role:        match.pos_role,
+      role:        match.pos_role,                       // main role
+      roles:       match.pos_roles || [match.pos_role],  // everything they may do
       branch_id:   branch.id,
       branch_name: branch.name,
     }

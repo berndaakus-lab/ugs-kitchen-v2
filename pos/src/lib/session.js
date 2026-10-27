@@ -41,14 +41,18 @@ export async function readSession(req) {
 }
 
 // Managers (one branch) and admins (all branches) may use every screen.
+// `role` is the person's main role; `roles` everything they may do
+// (e.g. ['cashier','server']). Sessions from before multi-role have only `role`.
 export const isElevated = role => role === 'manager' || role === 'admin'
+export const userRoles = user => (user?.roles?.length ? user.roles : [user?.role].filter(Boolean))
+export const hasRole = (user, role) => isElevated(user?.role) || userRoles(user).includes(role)
 
 // Wrap an API handler: requires a session, optionally one of `roles`.
 export function withAuth(handler, { roles } = {}) {
   return async (req, res) => {
     const user = await readSession(req)
     if (!user) return res.status(401).json({ message: 'Please log in.' })
-    if (roles && !isElevated(user.role) && !roles.includes(user.role)) {
+    if (roles && !roles.some(r => hasRole(user, r))) {
       return res.status(403).json({ message: 'Not allowed for your role.' })
     }
     req.user = user
