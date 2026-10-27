@@ -176,7 +176,10 @@ begin
 end $$;
 
 -- Verify username + PIN. Locks the account for 10 minutes after 5 failures.
-create or replace function pos_verify_pin(p_username text, p_pin text)
+-- (pos_005 replaces this with a version that also returns all roles; if you
+-- re-run this file, re-run pos_005 after it.)
+drop function if exists pos_verify_pin(text, text);
+create function pos_verify_pin(p_username text, p_pin text)
 returns table (pos_staff_id uuid, staff_id uuid, name text, pos_role text, branch_id uuid, locked boolean)
 language plpgsql set search_path = public, extensions as $$
 declare r record;

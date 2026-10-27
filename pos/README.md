@@ -16,7 +16,7 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
 4. **Manager** (`/manager`):
    - Sales for the day: walk-in and **online** combined, with totals by payment method and per-staff breakdowns.
    - Voids: always need a manager PIN, only before any food is served, and are logged.
-   - POS staff logins (`/manager/staff`).
+   - POS staff logins (`/manager/staff`). A person can have **more than one role**: tick both Cashier and Server for someone who does both. They then see Sell and Serve, and both reports on My shift. Manager and Admin already cover every screen, so they stand alone.
 
 ## Walk-in customers and reviews
 
@@ -32,6 +32,7 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
    2. `../migrations/pos_002_change_pin.sql`
    3. `../migrations/pos_003_customers.sql`
    4. `../migrations/pos_004_walkin_reviews.sql`
+   5. `../migrations/pos_005_multi_roles.sql`: lets one person hold several roles (e.g. cashier + server)
 
    They add only new `pos_*` objects, with one exception: `pos_004` adds an optional `pos_sale_id` column to the online `reviews` table. That's how walk-in reviews appear in the online admin and on the website.
 2. Create the owner's **admin** login once in the SQL editor. The owner must already exist in the online app's staff list:

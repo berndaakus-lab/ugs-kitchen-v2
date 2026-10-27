@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { KeyRound, LogOut } from 'lucide-react'
-import { api } from '@/lib/client'
+import { api, roleLabel, userRoles } from '@/lib/client'
 
 const NAV = {
   cashier: [['/cashier', 'Sell'], ['/shift', 'My shift']],
@@ -10,6 +10,12 @@ const NAV = {
   manager: [['/manager', 'Today'], ['/cashier', 'Sell'], ['/server', 'Serve'], ['/shift', 'My shift'], ['/manager/customers', 'Customers'], ['/manager/staff', 'Staff']],
 }
 NAV.admin = NAV.manager
+
+// Menu for everything the person may do, e.g. cashier + server → Sell, Serve, My shift.
+function navFor(user) {
+  const seen = new Set()
+  return userRoles(user).flatMap(r => NAV[r] || []).filter(([href]) => !seen.has(href) && seen.add(href))
+}
 
 // Admin works across branches: every active branch from the online app is listed.
 function BranchSwitcher({ me }) {
@@ -54,7 +60,7 @@ export default function Layout({ me, children, right, fill }) {
           ? <BranchSwitcher me={me} />
           : <div className="max-w-[40vw] truncate text-sm text-white/70">{me.user.branch_name}</div>)}
         <nav className="no-scrollbar order-last -mx-1 flex w-full gap-1 overflow-x-auto md:order-none md:mx-0 md:w-auto">
-          {me && NAV[me.user.role].map(([href, label]) => (
+          {me && navFor(me.user).map(([href, label]) => (
             <Link
               key={href}
               href={href}
@@ -66,7 +72,7 @@ export default function Layout({ me, children, right, fill }) {
         </nav>
         <div className="ml-auto flex items-center gap-1 sm:gap-3">
           {right}
-          {me && <span className="hidden text-sm lg:inline">{me.user.name} · <span className="capitalize text-white/70">{me.user.role}</span></span>}
+          {me && <span className="hidden text-sm lg:inline">{me.user.name} · <span className="text-white/70">{roleLabel(userRoles(me.user))}</span></span>}
           {me && (
             <button onClick={() => setChangingPin(true)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Change my PIN" title="Change my PIN">
               <KeyRound size={18} />

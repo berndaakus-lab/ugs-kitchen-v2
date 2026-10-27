@@ -1,5 +1,5 @@
 import { db, rpc, loadSale, staffNames, today } from '@/lib/supabaseAdmin'
-import { withAuth, isElevated } from '@/lib/session'
+import { withAuth, isElevated, hasRole } from '@/lib/session'
 import { broadcast } from '@/lib/broadcast'
 import { parseCustomer, attachCustomer } from '@/lib/customers'
 import { sendReviewSms } from '@/lib/reviewSms'
@@ -16,7 +16,7 @@ export default withAuth(async (req, res) => {
 // POST { client_ref, items: [{menu_item_id, qty}], payments: [{method, amount, tendered?, reference?}],
 //        customer?: {phone, name?, opt_in?} }
 async function createSale(req, res) {
-  if (req.user.role !== 'cashier' && !isElevated(req.user.role)) {
+  if (!hasRole(req.user, 'cashier')) {
     return res.status(403).json({ message: 'Only cashiers can take payments.' })
   }
 
@@ -72,7 +72,7 @@ async function listSales(req, res) {
     q = q.eq('business_date', today()).in('status', ['paid', 'partially_served']).order('created_at', { ascending: true })
   } else if (view === 'recent') {
     q = q.eq('business_date', today()).order('created_at', { ascending: false }).limit(30)
-    if (req.user.role === 'cashier') q = q.eq('cashier_id', req.user.sid)
+    if (!isElevated(req.user.role)) q = q.eq('cashier_id', req.user.sid) // staff see only their own sales
   } else {
     return res.status(400).json({ message: 'Unknown view.' })
   }
