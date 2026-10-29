@@ -43,7 +43,23 @@ function summarise(sales) {
   }
 }
 
-const SALE_FIELDS = 'id, ticket_no, status, total, cashier_id, pos_sale_items(name_snapshot, qty, unit_price), pos_payments(method, amount, status)'
+const SALE_FIELDS = 'id, ticket_no, status, total, created_at, cashier_id, pos_sale_items(name_snapshot, qty, unit_price), pos_payments(method, amount, status)'
+
+// One line per sale for the report, oldest first. Unpaid MoMo attempts are
+// not sales; voided sales are listed (marked) so nothing disappears silently.
+function saleLines(sales) {
+  return sales
+    .filter(s => COUNTED.includes(s.status) || s.status === 'voided')
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map(s => ({
+      ticket_no: s.ticket_no,
+      at:        s.created_at,
+      status:    s.status,
+      total:     Number(s.total),
+      methods:   [...new Set((s.pos_payments || []).filter(p => p.status === 'success').map(p => p.method))],
+      items:     (s.pos_sale_items || []).map(i => ({ name: i.name_snapshot, qty: i.qty })),
+    }))
+}
 
 export async function shiftReport(shift) {
   const { data: sales, error } = await db.from('pos_sales').select(SALE_FIELDS).eq('shift_id', shift.id)
@@ -55,6 +71,7 @@ export async function shiftReport(shift) {
     shift: { ...shift, staff_name: names[shift.staff_id] },
     ...summary,
     expected_cash: round(Number(shift.opening_float) + summary.by_method.cash),
+    sales: saleLines(sales),
   }
 }
 
@@ -70,17 +87,25 @@ export async function serverReport(posStaffId, date) {
     .order('at')
   if (error) throw error
 
+  // One entry per ticket with exactly what this server handed over (a ticket
+  // served in two goes is one entry, its items added up).
   const tickets = {}
   const items = {}
   for (const e of events) {
     const t = tickets[e.sale_id] ||= {
-      ticket_no: e.pos_sales?.ticket_no, status: e.pos_sales?.status, first_at: e.at, item_count: 0,
+      ticket_no: e.pos_sales?.ticket_no, status: e.pos_sales?.status, first_at: e.at, last_at: e.at,
+      item_count: 0, items: {},
     }
+    t.last_at = e.at
     for (const i of e.items) {
       t.item_count += i.qty
+      t.items[i.name] = (t.items[i.name] || 0) + i.qty
       const row = items[i.name] ||= { name: i.name, qty: 0 }
       row.qty += i.qty
     }
+  }
+  for (const t of Object.values(tickets)) {
+    t.items = Object.entries(t.items).map(([name, qty]) => ({ name, qty }))
   }
 
   const names = await staffNames([posStaffId])

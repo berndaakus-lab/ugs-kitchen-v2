@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { sendSMS, smsPhone, msgOrderConfirmed, msgOwnerNewOrder } from '../../lib/sms'
+import { markPaymentFailed } from '../../lib/paymentStatus'
 
 // Disable Next.js body parsing — we need raw body for HMAC verification
 export const config = { api: { bodyParser: false } }
@@ -121,10 +122,8 @@ export default async function handler(req, res) {
   if (eventType === 'charge.failed' || eventType === 'transfer.failed') {
     const orderId = data.metadata?.order_id
     if (orderId) {
-      await supabase
-        .from('orders')
-        .update({ status: 'failed' })
-        .eq('id', orderId)
+      // Keeps Paystack's reason, and never turns an already-paid order back to failed.
+      await markPaymentFailed(supabase, orderId, data.gateway_response || 'Payment failed')
     }
   }
 

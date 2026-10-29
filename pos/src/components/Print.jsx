@@ -3,7 +3,7 @@
 // --kiosk-printing so it prints straight to the default printer, no dialog.
 import { useCallback, useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { ghs, dateTime, METHOD_LABEL, shownMethods } from '@/lib/client'
+import { ghs, dateTime, time, METHOD_LABEL, shownMethods } from '@/lib/client'
 import { maskPhone } from '@/lib/phone'
 
 export function usePrinter() {
@@ -160,9 +160,26 @@ export function ZReport({ report }) {
       )}
       <Rule />
       {report.items.map(i => <Row key={i.name} left={`${i.qty} × ${i.name}`} right={ghs(i.amount)} />)}
+      {report.sales?.length > 0 && (
+        <>
+          <Rule />
+          <div className="text-xs font-bold">SALES ({report.sales.length})</div>
+          {report.sales.map(s => (
+            <div key={s.ticket_no + s.at} className="mt-1">
+              <Row
+                left={`${s.ticket_no} ${time(s.at)} ${s.methods.map(m => SHORT_METHOD[m] || m).join('+')}`}
+                right={s.status === 'voided' ? `VOID ${ghs(s.total)}` : ghs(s.total)}
+              />
+              <div className="pl-2 text-[10px]">{s.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</div>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   )
 }
+
+const SHORT_METHOD = { cash: 'Cash', momo_paystack: 'MoMo', momo_manual: 'MoMo-ref', card: 'Card' }
 
 export function ServedReport({ report }) {
   return (
@@ -175,7 +192,13 @@ export function ServedReport({ report }) {
       <Rule />
       {report.items.map(i => <Row key={i.name} left={i.name} right={i.qty} />)}
       <Rule />
-      <div className="text-xs">Tickets: {report.tickets.map(t => t.ticket_no).join(', ')}</div>
+      <div className="text-xs font-bold">TICKETS ({report.tickets.length})</div>
+      {report.tickets.map(t => (
+        <div key={t.ticket_no + t.first_at} className="mt-1">
+          <Row left={t.ticket_no} right={`${time(t.last_at || t.first_at)}${t.status === 'partially_served' ? ' PART' : ''}`} />
+          <div className="pl-2 text-[10px]">{(t.items || []).map(i => `${i.qty}× ${i.name}`).join(', ')}</div>
+        </div>
+      ))}
     </div>
   )
 }

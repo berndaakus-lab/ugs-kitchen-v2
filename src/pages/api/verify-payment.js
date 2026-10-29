@@ -2,6 +2,7 @@ import axios from 'axios'
 import { createClient } from '@supabase/supabase-js'
 import { sendSMS, smsPhone, msgOrderConfirmed, msgOwnerNewOrder } from '../../lib/sms'
 import { pushAdmins, pushCustomer } from '../../lib/push'
+import { markPaymentFailed } from '../../lib/paymentStatus'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -83,18 +84,25 @@ export default async function handler(req, res) {
     }
 
     if (status === 'failed') {
-      await supabase
-        .from('orders')
-        .update({ status: 'failed' })
-        .eq('id', orderId)
-
       const gatewayResponse = paystackRes?.data?.gateway_response ?? ''
+      await markPaymentFailed(supabase, orderId, gatewayResponse || 'Payment failed')
       return res.status(200).json({ status: 'failed', reason: gatewayResponse })
     }
 
-    // still pending / pay_offline / charge_attempted — keep waiting
-    return res.status(200).json({ status: 'pending', paystackStatus: status })
+    // still pending / pay_offline / charge_attempted — keep waiting.
+    // send_otp: Paystack wants a code before it sends the prompt (often a
+    // first payment from this number) — the page shows the code box.
+    return res.status(200).json({
+      status:      'pending',
+      paystackStatus: status,
+      requiresOtp: status === 'send_otp',
+      message:     paystackRes?.data?.display_text || null,
+    })
   } catch (err) {
+    // Paystack has no charge with this reference (the payment never started).
+    if (err.response?.status === 404 || /not found/i.test(err.response?.data?.message || '')) {
+      return res.status(200).json({ status: 'not_found' })
+    }
     console.error('[verify-payment]', err.message)
     return res.status(500).json({ message: 'Verification failed' })
   }
