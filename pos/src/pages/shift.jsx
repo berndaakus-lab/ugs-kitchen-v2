@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Printer } from 'lucide-react'
 import Layout, { ErrorText, Stat } from '@/components/Layout'
 import { usePrinter } from '@/components/Print'
-import { api, ghs, dateTime, METHOD_LABEL, shownMethods, hasRole, userRoles, useMe } from '@/lib/client'
+import { api, ghs, dateTime, time, METHOD_LABEL, shownMethods, hasRole, userRoles, useMe } from '@/lib/client'
 
 export default function Shift() {
   const [me, reloadMe] = useMe()
@@ -117,6 +117,38 @@ function ReportCard({ report }) {
       {report.unserved.length > 0 && (
         <div className="rounded-xl bg-amber-50 p-2 text-sm text-amber-900">Not yet served: {report.unserved.join(', ')}</div>
       )}
+      <SalesList sales={report.sales || []} />
+    </div>
+  )
+}
+
+// Every sale in the shift, so the cashier/manager can check each one, not just the totals.
+function SalesList({ sales }) {
+  return (
+    <div>
+      <h3 className="mb-1 text-sm font-black">Sales in this shift ({sales.length})</h3>
+      <div className="max-h-[50vh] overflow-auto rounded-xl border">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-brand-cream text-left text-xs uppercase text-gray-500">
+            <tr><th className="p-2">Ticket</th><th className="p-2">Time</th><th className="p-2">Items</th><th className="p-2">Paid by</th><th className="p-2 text-right">Amount</th></tr>
+          </thead>
+          <tbody className="divide-y">
+            {sales.map(s => {
+              const voided = s.status === 'voided'
+              return (
+                <tr key={s.ticket_no + s.at} className={voided ? 'text-gray-400' : ''}>
+                  <td className="whitespace-nowrap p-2 font-bold">{s.ticket_no}</td>
+                  <td className="whitespace-nowrap p-2">{time(s.at)}</td>
+                  <td className="p-2">{s.items.map(i => `${i.qty}× ${i.name}`).join(', ')}{voided && <span className="ml-1 font-bold text-red-600">VOIDED</span>}</td>
+                  <td className="whitespace-nowrap p-2">{s.methods.map(m => METHOD_LABEL[m] || m).join(' + ') || '—'}</td>
+                  <td className={`whitespace-nowrap p-2 text-right font-bold ${voided ? 'line-through' : ''}`}>{ghs(s.total)}</td>
+                </tr>
+              )
+            })}
+            {!sales.length && <tr><td colSpan={5} className="p-4 text-center text-gray-400">No sales yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -138,7 +170,27 @@ function ServerReport({ print }) {
         <div className="text-sm">
           {report.items.map(i => <div key={i.name} className="flex justify-between border-b py-1"><span>{i.name}</span><b>{i.qty}</b></div>)}
         </div>
-        <div className="text-xs text-gray-500">Tickets: {report.tickets.map(t => t.ticket_no).join(', ') || '—'}</div>
+        <h3 className="text-sm font-black">Tickets served ({report.tickets.length})</h3>
+        <div className="max-h-[50vh] overflow-auto rounded-xl border">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-brand-cream text-left text-xs uppercase text-gray-500">
+              <tr><th className="p-2">Ticket</th><th className="p-2">Served</th><th className="p-2">Items handed over</th></tr>
+            </thead>
+            <tbody className="divide-y">
+              {report.tickets.map(t => (
+                <tr key={t.ticket_no + t.first_at}>
+                  <td className="whitespace-nowrap p-2 font-bold">{t.ticket_no}</td>
+                  <td className="whitespace-nowrap p-2">{time(t.last_at || t.first_at)}</td>
+                  <td className="p-2">
+                    {(t.items || []).map(i => `${i.qty}× ${i.name}`).join(', ')}
+                    {t.status === 'partially_served' && <span className="ml-1 text-xs font-bold text-purple-700">PART</span>}
+                  </td>
+                </tr>
+              ))}
+              {!report.tickets.length && <tr><td colSpan={3} className="p-4 text-center text-gray-400">Nothing served yet today.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
       <button className="btn-ghost" onClick={() => print('served', report)}><Printer size={18} /> Print report</button>
     </>
