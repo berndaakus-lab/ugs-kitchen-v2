@@ -71,7 +71,8 @@ async function listSales(req, res) {
   if (view === 'queue') {
     q = q.eq('business_date', today()).in('status', ['paid', 'partially_served']).order('created_at', { ascending: true })
   } else if (view === 'recent') {
-    q = q.eq('business_date', today()).order('created_at', { ascending: false }).limit(30)
+    q = q.eq('business_date', today()).not('status', 'in', '(pending_payment,failed)') // unpaid attempts aren't sales
+      .order('created_at', { ascending: false }).limit(30)
     if (!isElevated(req.user.role)) q = q.eq('cashier_id', req.user.sid) // staff see only their own sales
   } else {
     return res.status(400).json({ message: 'Unknown view.' })

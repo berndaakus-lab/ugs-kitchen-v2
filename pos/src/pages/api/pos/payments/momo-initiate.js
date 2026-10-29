@@ -39,27 +39,27 @@ export default withAuth(async (req, res) => {
   }
   const pending = sale.payments.find(p => p.status === 'pending')
   if (pending?.reference) {
-    return res.status(200).json({ sale_id: sale.id, ticket_no: sale.ticket_no, reference: pending.reference, status: 'pending' })
+    return res.status(200).json({ sale_id: sale.id, reference: pending.reference, status: 'pending' })
   }
 
-  const reference = `UGSPOS-${sale.ticket_no}-${Date.now()}`
+  // The ticket number is only given once Paystack confirms (pos_confirm_payment).
+  const reference = `UGSPOS-${sale.id.slice(0, 8)}-${Date.now()}`
   await db.from('pos_payments').update({ reference }).eq('id', pending.id)
 
   try {
     const charge = await chargeMomo({
-      phone: cleanPhone, amount: sale.total, reference, saleId: sale.id, ticketNo: sale.ticket_no,
+      phone: cleanPhone, amount: sale.total, reference, saleId: sale.id, ticketNo: null,
     })
     return res.status(200).json({
       sale_id:     sale.id,
-      ticket_no:   sale.ticket_no,
       reference,
       status:      'pending',
       requiresOtp: charge?.status === 'send_otp',
       message:     charge?.display_text || 'Prompt sent. Ask the customer to approve on their phone.',
     })
   } catch (err) {
-    await db.from('pos_payments').update({ status: 'failed' }).eq('id', pending.id)
-    await db.from('pos_sales').update({ status: 'failed' }).eq('id', sale.id)
+    // Payment never started: don't keep the sale.
+    await rpc('pos_discard_pending', { p_sale: sale.id, p_actor: req.user.sid, p_reason: `charge failed: ${paystackError(err)}` })
     return res.status(502).json({ message: paystackError(err), status: 'failed' })
   }
 }, { roles: ['cashier'] })

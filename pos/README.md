@@ -33,6 +33,19 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
    3. `../migrations/pos_003_customers.sql`
    4. `../migrations/pos_004_walkin_reviews.sql`
    5. `../migrations/pos_005_multi_roles.sql`: lets one person hold several roles (e.g. cashier + server)
+   6. `../migrations/pos_006_running_tickets_momo.sql`:
+      - Ticket numbers keep counting across days.
+      - A MoMo sale only becomes a real sale, with a ticket number, once Paystack confirms the money.
+      - Failed or cancelled MoMo attempts are deleted, with a `momo_not_paid` line kept in `pos_audit_log` (it holds the Paystack reference).
+
+   If you ever re-run an earlier migration, re-run the later ones after it, in order.
+
+**Before going live**, clear the test data with `scripts/wipe_test_data.sql`:
+1. Run step 1 to preview the counts.
+2. Run step 2 to delete sales, shifts and cash records and restart numbering at W-001.
+3. Step 3 is optional and also deletes test customers.
+
+Staff logins, the menu and online orders are kept.
 
    They add only new `pos_*` objects, with one exception: `pos_004` adds an optional `pos_sale_id` column to the online `reviews` table. That's how walk-in reviews appear in the online admin and on the website.
 2. Create the owner's **admin** login once in the SQL editor. The owner must already exist in the online app's staff list:
