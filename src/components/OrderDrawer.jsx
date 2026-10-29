@@ -4,6 +4,7 @@ import { useCart } from '../context/CartContext'
 import { useBranch } from '../context/BranchContext'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
+import { isOpen as branchIsOpen, openHoursToday } from '../lib/businessHours'
 
 function formatGHS(amount) {
   return `GH₵ ${Number(amount).toFixed(2)}`
@@ -65,6 +66,13 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   async function handlePlaceOrder() {
     setToastError('')
     const phone = momoNum.replace(/\s/g, '')
+
+    // The branch may have closed while items were in the cart.
+    if (!branchIsOpen(currentBranch?.business_hours)) {
+      const hours = openHoursToday(currentBranch?.business_hours)
+      setToastError(`Sorry, we're closed right now${hours ? ` (today's hours: ${hours})` : ''}. Please order during working hours.`)
+      return
+    }
 
     // Validate all fields and show inline errors
     const errs = {}
