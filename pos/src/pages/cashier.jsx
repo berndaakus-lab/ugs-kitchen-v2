@@ -7,6 +7,7 @@ import CustomerFields, { emptyCustomer, customerPayload, customerProblem } from 
 import { OnlineOrderPanel, OnlineOrderSearch, useOnlineOrders } from '@/components/OnlineOrders'
 import { usePrinter } from '@/components/Print'
 import { api, ghs, time, uuid, useMe } from '@/lib/client'
+import { isOpen, openHoursToday } from '@/lib/businessHours'
 
 const ROLES = ['cashier']
 
@@ -32,7 +33,22 @@ export default function Cashier() {
       setError(err.message)
     }
   }
-  useEffect(() => { if (me?.shift) loadMenu() }, [me?.shift?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!me?.shift) return
+    loadMenu()
+    const id = setInterval(loadMenu, 5 * 60 * 1000) // picks up menu/hours changes made in the online admin
+    return () => clearInterval(id)
+  }, [me?.shift?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Working hours from the online admin, re-checked every 30 s. The POS never
+  // blocks a sale (someone may walk in at midnight); outside hours it just says
+  // so, and which day the sale counts for — sales are dated by the Ghana
+  // calendar day they're paid, so 00:05 counts for the new day.
+  const [, setNow] = useState(0)
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(id) }, [])
+  const shopOpen = isOpen(menu.business_hours)
+  const hoursToday = openHoursToday(menu.business_hours)
+  const salesDay = new Date().toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })
 
   // A new idempotency key whenever the cart changes, so a retried payment for
   // the same cart can never create a second sale.
@@ -155,6 +171,12 @@ export default function Cashier() {
                 {!cart.length && <div className="p-4 text-center text-gray-400 md:p-8">Tap items to add them.</div>}
               </div>
               <div className="shrink-0 space-y-2 border-t p-3">
+                {!shopOpen && (
+                  <div className="rounded-xl bg-amber-50 p-2 text-sm font-semibold text-amber-900">
+                    Outside working hours{hoursToday ? ` (today ${hoursToday})` : ''} — you can still sell.
+                    Sales now count for <b>{salesDay}</b>.
+                  </div>
+                )}
                 <div className="flex justify-between text-xl font-black md:text-2xl"><span>Total</span><span>{ghs(total)}</span></div>
                 {/* The shop takes cash and MoMo prompt only. The API also accepts
                     momo_manual / card if they are ever needed again. */}

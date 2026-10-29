@@ -2,6 +2,7 @@ import axios from 'axios'
 import { createClient } from '@supabase/supabase-js'
 import { toPaystackAmount, detectNetwork } from '../../api/paystack'
 import { markPaymentFailed } from '../../lib/paymentStatus'
+import { isOpen, openHoursToday } from '../../lib/businessHours'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -26,6 +27,19 @@ export default async function handler(req, res) {
   const cleanPhone = phone.replace(/\s/g, '')
   if (cleanPhone.length !== 10) {
     return res.status(400).json({ message: 'Invalid phone number.' })
+  }
+
+  // Working hours are enforced here too, not just by greying out the menu:
+  // a cart filled before closing time can't be paid for after it.
+  const { data: orderRow } = await supabase.from('orders').select('branch_id').eq('id', orderId).maybeSingle()
+  if (orderRow?.branch_id) {
+    const { data: branch } = await supabase.from('branches').select('business_hours').eq('id', orderRow.branch_id).maybeSingle()
+    if (branch && !isOpen(branch.business_hours)) {
+      const hours = openHoursToday(branch.business_hours)
+      const msg = `Sorry, we're closed right now${hours ? ` (today's hours: ${hours})` : ''}. Please order during working hours.`
+      await markPaymentFailed(supabase, orderId, 'Shop closed (outside working hours)')
+      return res.status(403).json({ message: msg })
+    }
   }
 
   const network    = detectNetwork(cleanPhone)

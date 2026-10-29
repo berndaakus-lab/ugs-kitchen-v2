@@ -69,7 +69,10 @@ async function listSales(req, res) {
     .eq('branch_id', req.user.branch_id)
 
   if (view === 'queue') {
-    q = q.eq('business_date', today()).in('status', ['paid', 'partially_served']).order('created_at', { ascending: true })
+    // Every unserved ticket from the last 24 h — not just today's date, so a
+    // ticket paid at 23:55 doesn't vanish from the queue at midnight.
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    q = q.gte('created_at', since).in('status', ['paid', 'partially_served']).order('created_at', { ascending: true })
   } else if (view === 'recent') {
     q = q.eq('business_date', today()).not('status', 'in', '(pending_payment,failed)') // unpaid attempts aren't sales
       .order('created_at', { ascending: false }).limit(30)
