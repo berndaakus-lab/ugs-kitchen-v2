@@ -4,7 +4,10 @@ import { broadcast } from '@/lib/broadcast'
 import { checkCharge, toPesewas, paystackError, nameFromCharge } from '@/lib/paystack'
 import { sendReviewSms } from '@/lib/reviewSms'
 
-const NOT_PAID = { status: 'failed', message: "Payment didn't go through. Nothing was saved — start the payment again." }
+// Same value as MIN_APPROVAL_SECONDS on the cashier screen.
+const MIN_APPROVAL_SECONDS = 120
+
+const NOT_PAID ={ status: 'failed', message: "Payment didn't go through. Nothing was saved — start the payment again." }
 
 // GET  ?sale_id=   → poll the charge; on success the sale becomes real (gets its ticket number).
 // POST { sale_id, cancel: true } → cashier gave up; final check, then the sale is deleted.
@@ -48,6 +51,15 @@ export default withAuth(async (req, res) => {
     const paid = await loadSale(sale.id)
     if (flipped) await broadcast(req.user.branch_id, 'sale_paid', { id: paid.id, ticket_no: paid.ticket_no })
     return res.status(200).json({ status: 'success', sale: paid })
+  }
+
+  // Give the customer at least 2 minutes to approve (from the prompt, or from
+  // entering the OTP) before calling it "not approved". `waited` comes from
+  // the cashier's screen; the cashier can still cancel at any time.
+  const waited = Number(req.query.waited) || 0
+  if (charge?.status === 'failed' && !cancel && waited < MIN_APPROVAL_SECONDS) {
+    console.warn('[momo-verify] failed reported after', waited, 's — still within approval window', payment.reference)
+    return res.status(200).json({ status: 'pending', message: 'Waiting for the customer to approve…' })
   }
 
   if (charge?.status === 'failed' || cancel) {

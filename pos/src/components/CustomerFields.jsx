@@ -26,8 +26,11 @@ export default function CustomerFields({ value, onChange, phone, hidePhone }) {
     // onChange is the parent's state setter, so use updater functions: the
     // cashier may tick the promo box while the lookup is still running.
     setInfo(null)
-    onChange(v => (v.name ? { ...v, name: '' } : v)) // name belonged to the previous number
-    if (!number || number.length !== 10) return
+    // A full number pre-ticks the promo box (shop's choice); the cashier asks
+    // and unticks it if the customer says no. Cleared when the number changes.
+    const full = number && number.length === 10
+    onChange(v => ({ ...v, name: '', opt_in: Boolean(full) }))
+    if (!full) return
     let live = true
     setLooking(true)
     api(`customers/lookup?phone=${number}`)
@@ -73,7 +76,7 @@ export default function CustomerFields({ value, onChange, phone, hidePhone }) {
             : (
               <label className="flex items-start gap-2 text-sm">
                 <input type="checkbox" className="mt-0.5 h-4 w-4" checked={value.opt_in} onChange={e => set({ opt_in: e.target.checked })} />
-                <span>Customer agrees to receive offers and promos by SMS <span className="text-gray-500">(ask first)</span></span>
+                <span>Customer agrees to receive offers and promos by SMS <span className="text-gray-500">(ask first — untick if they say no)</span></span>
               </label>
             )}
           <div className="text-xs text-gray-500">A thank-you SMS with a review link is sent once payment is done.</div>
