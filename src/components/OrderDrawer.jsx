@@ -129,14 +129,15 @@ export default function OrderDrawer({ onPaymentSuccess }) {
         return
       }
 
-      pollOrderStatus(order.id, result.reference)
+      pollOrderStatus(order.id, result.reference, { uncertain: result.uncertain })
     } catch (err) {
       setToastError(err.message)
       setLoading(false)
     }
   }
 
-  function pollOrderStatus(orderId, reference) {
+  // uncertain = the payment start lost contact with Paystack (initiate-payment)
+  function pollOrderStatus(orderId, reference, { uncertain = false } = {}) {
     let resolved = false
 
     async function handleSuccess(orderData) {
@@ -167,6 +168,8 @@ export default function OrderDrawer({ onPaymentSuccess }) {
         msg = 'Payment timed out. Please try again.'
       } else if (r.includes('cancel')) {
         msg = 'Payment was cancelled. Try again when ready.'
+      } else if (r.includes('could not be started')) {
+        msg = reason
       }
       setToastError(msg)
     }
@@ -180,13 +183,30 @@ export default function OrderDrawer({ onPaymentSuccess }) {
         payload => {
           const status = payload.new.status
           if (status === 'paid')   handleSuccess(payload.new)
-          if (status === 'failed') handleFailed()
+          if (status === 'failed') handleFailed(payload.new.payment_failure_reason)
         }
       )
       .subscribe()
 
+    // Paystack wants a one-time code before it sends the prompt: stop waiting
+    // and show the code box (submitting it restarts this check).
+    function handleNeedsOtp() {
+      if (resolved) return
+      resolved = true
+      channel.unsubscribe()
+      clearTimeout(timeoutId)
+      setLoading(false)
+      setOtpState({ reference, orderId })
+    }
+
+    async function loadPaidOrder() {
+      const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single()
+      handleSuccess(order)
+    }
+
     // Layer 2 — Direct Paystack verify polling (fast at first, then slower)
     let pollCount = 0
+    let notFoundCount = 0
     async function doPoll() {
       if (resolved || !reference) return
       pollCount++
@@ -196,14 +216,15 @@ export default function OrderDrawer({ onPaymentSuccess }) {
         )
         const data = await res.json()
         if (data.status === 'paid') {
-          const { data: order } = await supabase
-            .from('orders')
-            .select('*')
-            .eq('id', orderId)
-            .single()
-          handleSuccess(order)
+          await loadPaidOrder()
         } else if (data.status === 'failed') {
           handleFailed(data.reason)
+        } else if (data.requiresOtp) {
+          handleNeedsOtp()
+        } else if (data.status === 'not_found' && uncertain && ++notFoundCount >= 6) {
+          // We lost contact while starting the payment and Paystack still has
+          // no record of it after ~12 s: it never received the request.
+          handleFailed('Payment could not be started. Please check your connection and try again.')
         } else if (!resolved) {
           // Poll every 2s for first 10 attempts, then every 5s
           setTimeout(doPoll, pollCount < 10 ? 2000 : 5000)
@@ -212,17 +233,27 @@ export default function OrderDrawer({ onPaymentSuccess }) {
         if (!resolved) setTimeout(doPoll, 3000)
       }
     }
-    const pollInterval = { cancel: () => { resolved = true } }
     setTimeout(doPoll, 2000) // first check after 2s
 
-    // Layer 3 — Hard timeout after 3 minutes
-    const timeoutId = setTimeout(() => {
+    // Layer 3 — after 3 minutes, check one last time before giving up. If it's
+    // still not confirmed, the customer may approve late: the order then
+    // confirms by itself (webhook), so tell them NOT to pay again.
+    const timeoutId = setTimeout(async () => {
+      if (resolved) return
+      try {
+        const res = await fetch(`/api/verify-payment?reference=${reference}&orderId=${orderId}`)
+        const data = await res.json()
+        if (data.status === 'paid') return loadPaidOrder()
+        if (data.status === 'failed') return handleFailed(data.reason)
+      } catch { /* fall through to the message below */ }
       if (resolved) return
       resolved = true
       channel.unsubscribe()
-      clearInterval(pollInterval)
       setLoading(false)
-      setToastError('Payment timed out. Check your phone and try again.')
+      setToastError(
+        "We haven't received your payment confirmation yet. If you approved it on your phone, " +
+        "your order will be confirmed automatically and you'll get an SMS — please don't pay again."
+      )
     }, 180_000)
   }
 
@@ -479,8 +510,9 @@ export default function OrderDrawer({ onPaymentSuccess }) {
               <p className="font-bold text-brand-dark text-center text-sm">
                 Enter the code sent to your phone
               </p>
-              <p className="text-xs text-gray-400 text-center">
-                Check your SMS for a code from MTN/Paystack
+              <p className="text-xs text-gray-500 text-center">
+                A one-time code was sent by SMS to {momoNum}. This usually happens only the first time
+                you pay with this number. Enter it, then approve the MoMo prompt with your PIN.
               </p>
               <input
                 type="text"
@@ -509,10 +541,11 @@ export default function OrderDrawer({ onPaymentSuccess }) {
             <div className="flex flex-col items-center gap-3 py-4">
               <Loader2 size={32} className="animate-spin text-brand-orange" />
               <p className="font-bold text-brand-dark text-center">
-                Confirming your payment…
+                Approve the payment on your phone
               </p>
-              <p className="text-xs text-gray-400 text-center">
-                Please wait while we verify your transaction.
+              <p className="text-xs text-gray-500 text-center">
+                A MoMo prompt has been sent to {momoNum}. Enter your MoMo PIN to approve it.
+                Keep this page open — your order is confirmed as soon as the payment arrives.
               </p>
             </div>
           ) : (

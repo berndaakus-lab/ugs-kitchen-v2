@@ -59,6 +59,7 @@ function ordersToRows(orders, branchName = '') {
     'Total (GH₵)':   Number(o.total_amount).toFixed(2),
     'Status':        o.status,
     'Channel':       o.payment_channel ?? '',
+    'Payment Problem': o.payment_failure_reason ?? '',
     'Branch':        branchName || o.branch_id || '',
     'Delivered By':  o.delivered_by ?? '',
     'Delivered At':  o.delivered_at ? new Date(o.delivered_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' }) : '',
@@ -425,6 +426,9 @@ function OrderModal({ order, onClose, onStatusChange, onAddTime }) {
           )}
           {order.actioned_by && (
             <Row label="Actioned by" value={`${order.actioned_by}${order.actioned_at ? ' · ' + formatTime(order.actioned_at) : ''}`} />
+          )}
+          {order.payment_failure_reason && (
+            <Row label="Payment problem" value={order.payment_failure_reason} />
           )}
         </div>
 
