@@ -359,6 +359,9 @@ function PayModal({ method, cart, total, clientRef, newClientRef, onClose, onPai
   )
 }
 
+// Same value as MIN_APPROVAL_SECONDS in api/pos/payments/momo-verify.js
+const MIN_APPROVAL_SECONDS = 120
+
 function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
   const [phone, setPhone] = useState('')
   const [customer, setCustomer] = useState(emptyCustomer) // phone comes from the MoMo number
@@ -366,21 +369,28 @@ function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
   const [state, setState] = useState({ step: 'phone' }) // phone | waiting | failed
   const [busy, setBusy] = useState(false)
   const timer = useRef()
-  const startedAt = useRef(0)
+  const approvalStart = useRef(0) // when the prompt was sent, or the OTP entered
+  const otpSentAt = useRef(0)
+  const [, tick] = useState(0)     // re-render each poll so the countdown moves
 
   useEffect(() => () => clearInterval(timer.current), [])
 
+  const waited = () => Math.floor((Date.now() - approvalStart.current) / 1000)
+
   // Check every 2.5 s so the ticket prints soon after the customer approves;
   // never more than one check at a time on a slow connection.
+  // The customer always gets at least 2 minutes to approve (MoMo cash-out
+  // approval): the server won't call it "not approved" before then.
   const checking = useRef(false)
   function poll(saleId) {
     clearInterval(timer.current)
-    startedAt.current = Date.now()
+    approvalStart.current = Date.now()
     timer.current = setInterval(async () => {
+      tick(t => t + 1)
       if (checking.current) return
       checking.current = true
       try {
-        const r = await api(`payments/momo-verify?sale_id=${saleId}`)
+        const r = await api(`payments/momo-verify?sale_id=${saleId}&waited=${waited()}`)
         if (r.status === 'success') {
           clearInterval(timer.current)
           onPaid(r.sale)
@@ -389,9 +399,13 @@ function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
           newClientRef()
           setState({ step: 'failed', message: r.message })
         } else {
+          // Right after an OTP is entered Paystack can still say "send_otp" for
+          // a few seconds; don't pop the code box back up during that time.
+          const otpJustSent = Date.now() - otpSentAt.current < 30000
           setState(s => ({
-            ...s, message: r.message, requiresOtp: r.requiresOtp || s.requiresOtp,
-            slow: Date.now() - startedAt.current > 3 * 60 * 1000,
+            ...s, message: r.message,
+            requiresOtp: otpJustSent ? false : (r.requiresOtp || s.requiresOtp),
+            slow: waited() > 3 * 60,
           }))
         }
       } catch {
@@ -427,6 +441,10 @@ function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
   async function sendOtp() {
     try {
       const r = await api('payments/momo-otp', { method: 'POST', body: { sale_id: state.saleId, otp } })
+      // The approval prompt only reaches the phone now: give the full 2 minutes again.
+      otpSentAt.current = Date.now()
+      approvalStart.current = Date.now()
+      setOtp('')
       setState(s => ({ ...s, message: r.message, requiresOtp: false }))
     } catch (err) {
       setState(s => ({ ...s, message: err.message }))
@@ -464,6 +482,11 @@ function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
     <div className="space-y-3 text-center">
       <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-brand-muted border-t-brand-orange" />
       <div className="font-bold">Waiting for the customer to approve on their phone</div>
+      {waited() < MIN_APPROVAL_SECONDS && !state.requiresOtp && (
+        <div className="text-sm font-semibold text-brand-brown">
+          Customer has {Math.floor((MIN_APPROVAL_SECONDS - waited()) / 60)}:{String((MIN_APPROVAL_SECONDS - waited()) % 60).padStart(2, '0')} to approve
+        </div>
+      )}
       <div className="text-xs text-gray-500">The ticket number is given once the money arrives. If it fails, nothing is saved.</div>
       <div className="text-sm text-gray-600">{state.message}</div>
       {state.requiresOtp && (

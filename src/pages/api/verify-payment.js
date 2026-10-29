@@ -9,6 +9,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
+// Same value as MIN_APPROVAL_SECONDS in components/OrderDrawer.jsx
+const MIN_APPROVAL_SECONDS = 120
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ message: 'Method not allowed' })
 
@@ -81,6 +84,14 @@ export default async function handler(req, res) {
       }
 
       return res.status(200).json({ status: 'paid' })
+    }
+
+    // Give the customer at least 2 minutes to approve (from the prompt, or from
+    // entering the OTP) before calling it failed. `waited` comes from the page.
+    const waited = Number(req.query.waited) || 0
+    if (status === 'failed' && req.query.waited !== undefined && waited < MIN_APPROVAL_SECONDS) {
+      console.warn('[verify-payment] failed reported after', waited, 's — still within approval window', reference)
+      return res.status(200).json({ status: 'pending', paystackStatus: status, requiresOtp: false })
     }
 
     if (status === 'failed') {

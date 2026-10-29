@@ -137,8 +137,14 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   }
 
   // uncertain = the payment start lost contact with Paystack (initiate-payment)
-  function pollOrderStatus(orderId, reference, { uncertain = false } = {}) {
+  // afterOtp   = restarted right after the customer entered the OTP
+  // The customer always gets at least 2 minutes to approve (MoMo cash-out
+  // approval) before we say the payment failed.
+  function pollOrderStatus(orderId, reference, { uncertain = false, afterOtp = false } = {}) {
     let resolved = false
+    const startedAt = Date.now()
+    const waited = () => Math.floor((Date.now() - startedAt) / 1000)
+    const MIN_APPROVAL_SECONDS = 120 // same as in /api/verify-payment
 
     async function handleSuccess(orderData) {
       if (resolved) return
@@ -183,7 +189,8 @@ export default function OrderDrawer({ onPaymentSuccess }) {
         payload => {
           const status = payload.new.status
           if (status === 'paid')   handleSuccess(payload.new)
-          if (status === 'failed') handleFailed(payload.new.payment_failure_reason)
+          // Inside the 2-minute approval window, let the regular check decide.
+          if (status === 'failed' && waited() >= MIN_APPROVAL_SECONDS) handleFailed(payload.new.payment_failure_reason)
         }
       )
       .subscribe()
@@ -212,14 +219,15 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       pollCount++
       try {
         const res = await fetch(
-          `/api/verify-payment?reference=${reference}&orderId=${orderId}`
+          `/api/verify-payment?reference=${reference}&orderId=${orderId}&waited=${waited()}`
         )
         const data = await res.json()
         if (data.status === 'paid') {
           await loadPaidOrder()
         } else if (data.status === 'failed') {
           handleFailed(data.reason)
-        } else if (data.requiresOtp) {
+        } else if (data.requiresOtp && !(afterOtp && waited() < 30)) {
+          // (right after an OTP, Paystack can still say "send_otp" for a few seconds)
           handleNeedsOtp()
         } else if (data.status === 'not_found' && uncertain && ++notFoundCount >= 6) {
           // We lost contact while starting the payment and Paystack still has
@@ -241,7 +249,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
     const timeoutId = setTimeout(async () => {
       if (resolved) return
       try {
-        const res = await fetch(`/api/verify-payment?reference=${reference}&orderId=${orderId}`)
+        const res = await fetch(`/api/verify-payment?reference=${reference}&orderId=${orderId}&waited=${waited()}`)
         const data = await res.json()
         if (data.status === 'paid') return loadPaidOrder()
         if (data.status === 'failed') return handleFailed(data.reason)
@@ -291,7 +299,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       setOtpState(null)
       setOtp('')
       setLoading(true)
-      pollOrderStatus(otpState.orderId, otpState.reference)
+      pollOrderStatus(otpState.orderId, otpState.reference, { afterOtp: true })
     } catch (err) {
       setToastError(err.message)
     } finally {
