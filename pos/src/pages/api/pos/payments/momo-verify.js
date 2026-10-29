@@ -4,16 +4,20 @@ import { broadcast } from '@/lib/broadcast'
 import { checkCharge, toPesewas, paystackError, nameFromCharge } from '@/lib/paystack'
 import { sendReviewSms } from '@/lib/reviewSms'
 
-// GET  ?sale_id=   → poll the charge; flips the sale to paid on success.
-// POST { sale_id, cancel: true } → cashier gave up; final check, then mark failed.
+const NOT_PAID = { status: 'failed', message: "Payment didn't go through. Nothing was saved — start the payment again." }
+
+// GET  ?sale_id=   → poll the charge; on success the sale becomes real (gets its ticket number).
+// POST { sale_id, cancel: true } → cashier gave up; final check, then the sale is deleted.
+// A sale whose payment fails or is cancelled is deleted, not kept (see pos_discard_pending).
 export default withAuth(async (req, res) => {
   const saleId = req.method === 'POST' ? req.body?.sale_id : req.query.sale_id
   const cancel = req.method === 'POST' && req.body?.cancel === true
 
-  const sale = await loadSale(saleId)
+  const sale = await loadSale(saleId).catch(() => null)
+  if (!sale) return res.status(200).json(NOT_PAID) // already discarded
   if (sale.branch_id !== req.user.branch_id) return res.status(404).json({ message: 'Sale not found.' })
   if (sale.status === 'paid') return res.status(200).json({ status: 'success', sale })
-  if (sale.status !== 'pending_payment') return res.status(200).json({ status: 'failed', message: 'Payment failed.' })
+  if (sale.status !== 'pending_payment') return res.status(200).json(NOT_PAID)
 
   const payment = sale.payments.find(p => p.status === 'pending')
   if (!payment?.reference) return res.status(200).json({ status: 'failed', message: 'Payment was not started.' })
@@ -47,11 +51,11 @@ export default withAuth(async (req, res) => {
   }
 
   if (charge?.status === 'failed' || cancel) {
-    await db.from('pos_payments').update({ status: 'failed' }).eq('id', payment.id).eq('status', 'pending')
-    await db.from('pos_sales').update({ status: 'failed' }).eq('id', sale.id).eq('status', 'pending_payment')
+    const reason = cancel ? 'cancelled by cashier' : (charge.gateway_response || 'not approved by customer')
+    await rpc('pos_discard_pending', { p_sale: sale.id, p_actor: req.user.sid, p_reason: reason })
     return res.status(200).json({
       status:  'failed',
-      message: cancel ? 'Payment cancelled.' : (charge.gateway_response || 'Customer did not approve the payment.'),
+      message: cancel ? 'Payment cancelled. Nothing was saved.' : `${charge.gateway_response || 'Customer did not approve the payment.'} Nothing was saved.`,
     })
   }
 

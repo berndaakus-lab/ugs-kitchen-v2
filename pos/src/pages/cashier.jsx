@@ -370,10 +370,15 @@ function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
 
   useEffect(() => () => clearInterval(timer.current), [])
 
+  // Check every 2.5 s so the ticket prints soon after the customer approves;
+  // never more than one check at a time on a slow connection.
+  const checking = useRef(false)
   function poll(saleId) {
     clearInterval(timer.current)
     startedAt.current = Date.now()
     timer.current = setInterval(async () => {
+      if (checking.current) return
+      checking.current = true
       try {
         const r = await api(`payments/momo-verify?sale_id=${saleId}`)
         if (r.status === 'success') {
@@ -391,8 +396,10 @@ function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
         }
       } catch {
         // network blip — keep polling
+      } finally {
+        checking.current = false
       }
-    }, 4000)
+    }, 2500)
   }
 
   async function send(e) {
@@ -407,7 +414,7 @@ function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
         const { sale } = await api(`payments/momo-verify?sale_id=${r.sale_id}`)
         return onPaid(sale)
       }
-      setState({ step: 'waiting', saleId: r.sale_id, ticketNo: r.ticket_no, message: r.message, requiresOtp: r.requiresOtp })
+      setState({ step: 'waiting', saleId: r.sale_id, message: r.message, requiresOtp: r.requiresOtp })
       poll(r.sale_id)
     } catch (err) {
       newClientRef()
@@ -456,7 +463,8 @@ function MomoPrompt({ items, clientRef, newClientRef, onPaid, onClose }) {
   return (
     <div className="space-y-3 text-center">
       <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-brand-muted border-t-brand-orange" />
-      <div className="font-bold">Ticket {state.ticketNo} reserved — waiting for approval</div>
+      <div className="font-bold">Waiting for the customer to approve on their phone</div>
+      <div className="text-xs text-gray-500">The ticket number is given once the money arrives. If it fails, nothing is saved.</div>
       <div className="text-sm text-gray-600">{state.message}</div>
       {state.requiresOtp && (
         <div className="flex gap-2">
