@@ -25,6 +25,26 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
 - **Promo consent:** a separate tick box, off by default. The consent date is stored. **Customers** (manager/admin) exports only customers who agreed, as a CSV file.
 - **Review SMS:** as soon as a sale is paid (cash, or MoMo once confirmed), the customer gets one thank-you SMS. It has a review link to `/review` on this app, valid for 24 hours. Reviews are saved in the same `reviews` table as online reviews.
 
+## Central kitchen & branch stock (Module 2)
+
+- **Kitchen** (`/kitchen`, the **Kitchen** role or admin): sends cooked food to a branch, counted in plates, pieces or packs. A stock item can carry a batch conversion (e.g. "5 kg bag of rice = 25 plates") so the kitchen can enter bags. The screen shows each delivery's status and what every branch has left and sold today.
+- **Branch** (`/stock`, any staff member on duty):
+  - **Confirm deliveries.** Quantities are pre-filled with what was sent. If less arrived, change the number; a short delivery is flagged on the manager's **Today** page.
+  - **Stock now**, with low and out badges.
+  - **Closing count.** Leftovers carry over to the next day, and any difference is recorded.
+  - **Managers only:** waste and corrections (a reason is required), and the full history.
+- **What each dish uses** (`/manager/stock`): stock items, and links from each dish to what it uses.
+  - Example: Assorted Fried Rice = 1 fried-rice base + 1 chicken + 1 sausage.
+  - **Link dishes automatically** links every untracked dish 1:1 to a stock item with the same name.
+  - A dish with **no links is untracked** and sells exactly as before, so tracking can be rolled out dish by dish.
+- **Selling:**
+  - Every walk-in sale (cash at payment, MoMo when the money arrives) and every paid online order takes stock off. Voids and cancelled online orders put it back.
+  - **Sold out (0):**
+    - **POS:** the tile is greyed out and the server refuses the sale.
+    - **Website:** the dish is hidden, checkout re-checks, and the payment start refuses it.
+  - **Low:** the POS tile says "4 left" and the website says "Only 4 left".
+  - Two customers buying the last plate at the same moment can take stock below 0. That is shown, never hidden.
+
 ## Setup
 
 1. Run the migrations in the Supabase SQL editor, in this order. Paste each whole file and run it with nothing highlighted. Each one is safe to re-run.
@@ -37,6 +57,7 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
       - Ticket numbers keep counting across days.
       - A MoMo sale only becomes a real sale, with a ticket number, once Paystack confirms the money.
       - Failed or cancelled MoMo attempts are deleted, with a `momo_not_paid` line kept in `pos_audit_log` (it holds the Paystack reference).
+   7. `../migrations/pos_007_branch_stock.sql`: Module 2, central kitchen and branch stock (see below). It adds a trigger on the online `orders` table so paid orders take stock off. No columns are changed.
 
    If you ever re-run an earlier migration, re-run the later ones after it, in order.
 

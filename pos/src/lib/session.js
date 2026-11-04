@@ -78,10 +78,22 @@ const DB_MESSAGES = {
   CANNOT_VOID_SERVED: [409, 'Food has already been served on this ticket — it cannot be voided.'],
   CANNOT_VOID:        [409, 'This sale cannot be voided.'],
   INVALID_PHONE:      [400, 'Enter a valid 10-digit phone number.'],
+  NOTHING_TO_SEND:    [400, 'Add at least one item with a quantity.'],
+  DISPATCH_NOT_FOUND: [404, 'Delivery not found for this branch.'],
+  ALREADY_RECEIVED:   [409, 'This delivery was already confirmed.'],
 }
 
 export function sendDbError(res, err) {
   const msg = err?.message || String(err)
+  // OUT_OF_STOCK:<dish>:<how many left>
+  const oos = msg.match(/^OUT_OF_STOCK:(.+):(-?\d+)$/)
+  if (oos) {
+    const [, dish, left] = oos
+    return res.status(409).json({
+      message: Number(left) > 0 ? `Only ${left} ${dish} left.` : `${dish} is sold out.`,
+      code: 'OUT_OF_STOCK',
+    })
+  }
   const key = Object.keys(DB_MESSAGES).find(k => msg.startsWith(k))
   if (key) {
     const [status, text] = DB_MESSAGES[key]

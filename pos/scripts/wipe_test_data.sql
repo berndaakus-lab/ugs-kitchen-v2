@@ -54,3 +54,16 @@ commit;
 -- delete from pos_audit_log where action = 'customer_opt_out';
 -- delete from pos_customers;
 -- commit;
+
+
+-- ── STEP 4 (optional, Module 2): reset branch stock to zero ─────
+-- Use after testing stock. Clears every delivery, count and stock change, so
+-- all branches start at 0. KEEPS the stock items and what each dish uses.
+-- begin;
+-- delete from inv_count_lines;
+-- delete from inv_counts;
+-- delete from inv_dispatch_lines;
+-- delete from inv_dispatches;
+-- delete from inv_movements;
+-- delete from inv_balances;
+-- commit;

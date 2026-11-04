@@ -72,7 +72,7 @@ export const roleLabel = roles =>
   (roles || []).map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(' + ')
 
 export function homeFor(role) {
-  return { cashier: '/cashier', server: '/server', manager: '/manager', admin: '/manager' }[role] || '/login'
+  return { cashier: '/cashier', server: '/server', manager: '/manager', admin: '/manager', kitchen: '/kitchen' }[role] || '/login'
 }
 
 // Payment methods the shop uses (cash + MoMo prompt); others still show in

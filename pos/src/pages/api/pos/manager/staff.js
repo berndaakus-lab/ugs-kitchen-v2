@@ -1,11 +1,12 @@
 import { db, rpc } from '@/lib/supabaseAdmin'
 import { withAuth } from '@/lib/session'
 
-// Same rule as pos_normalize_roles() in the database: admin or manager stand
-// alone (they already open every screen); cashier and server can be combined.
+// Same rule as pos_normalize_roles() in the database: admin, manager and
+// kitchen stand alone; cashier and server can be combined.
 function normalizeRoles(roles) {
   if (roles.includes('admin')) return ['admin']
   if (roles.includes('manager')) return ['manager']
+  if (roles.includes('kitchen')) return ['kitchen']
   return ['cashier', 'server'].filter(r => roles.includes(r))
 }
 
@@ -16,7 +17,7 @@ function normalizeRoles(roles) {
 export default withAuth(async (req, res) => {
   const branchId = req.user.branch_id
   const isAdmin = req.user.role === 'admin'
-  const allowed = isAdmin ? ['cashier', 'server', 'manager', 'admin'] : ['cashier', 'server', 'manager']
+  const allowed = isAdmin ? ['cashier', 'server', 'kitchen', 'manager', 'admin'] : ['cashier', 'server', 'kitchen', 'manager']
 
   if (req.method === 'GET') {
     let staffQ = db.from('staff').select('id, name, username, role, is_active, branch_id').order('name')

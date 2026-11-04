@@ -6,7 +6,7 @@ import VoidModal from '@/components/VoidModal'
 import CustomerFields, { emptyCustomer, customerPayload, customerProblem } from '@/components/CustomerFields'
 import { OnlineOrderPanel, OnlineOrderSearch, useOnlineOrders } from '@/components/OnlineOrders'
 import { usePrinter } from '@/components/Print'
-import { api, ghs, time, uuid, useMe } from '@/lib/client'
+import { api, ghs, time, uuid, useBranchEvents, useMe } from '@/lib/client'
 import { isOpen, openHoursToday } from '@/lib/businessHours'
 
 const ROLES = ['cashier']
@@ -57,18 +57,28 @@ export default function Cashier() {
   const total = useMemo(() => cart.reduce((t, i) => t + i.price * i.qty, 0), [cart])
   const visible = category === 'all' ? menu.items : menu.items.filter(i => i.category_id === category)
 
+  // Stock (Module 2): { left, low } for tracked dishes; untracked dishes have none.
+  const stockOf = id => menu.stock?.[id]
+  const maxQty = id => stockOf(id)?.left ?? Infinity
+
   function add(item) {
     setDone(null)
     setCart(c => {
       const found = c.find(i => i.menu_item_id === item.id)
+      if ((found?.qty || 0) >= maxQty(item.id)) return c   // can't sell more than is left
       if (found) return c.map(i => (i === found ? { ...i, qty: i.qty + 1 } : i))
       return [...c, { menu_item_id: item.id, name: item.name, price: Number(item.price), qty: 1 }]
     })
   }
 
   function setQty(id, qty) {
+    qty = Math.min(qty, maxQty(id))
     setCart(c => (qty <= 0 ? c.filter(i => i.menu_item_id !== id) : c.map(i => (i.menu_item_id === id ? { ...i, qty } : i))))
   }
+
+  // Keep "left" counts fresh: after any sale, delivery or count at this branch,
+  // and every minute (online orders take stock without telling the till).
+  useBranchEvents(me?.shift ? me.user.branch_id : null, () => loadMenu(), 60000)
 
   // One printer, at the cashier: print the food ticket (customer hands it to the
   // server) and the customer's receipt together.
@@ -77,6 +87,7 @@ export default function Cashier() {
     setCart([])
     setDone({ sale, change })
     print('sale', { ...sale, branch_name: branchName })
+    loadMenu() // stock went down
   }
 
   if (me && !me.shift) {
@@ -116,16 +127,29 @@ export default function Cashier() {
           </div>
           <ErrorText>{error}</ErrorText>
           <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-4">
-            {visible.map(item => (
-              <button
-                key={item.id}
-                onClick={() => add(item)}
-                className="card flex min-h-[88px] min-w-0 flex-col justify-between text-left transition hover:ring-2 hover:ring-brand-orange active:scale-[0.98]"
-              >
-                <span className="break-words font-bold leading-tight">{item.name}</span>
-                <span className="mt-2 font-black text-brand-orange">{ghs(item.price)}</span>
-              </button>
-            ))}
+            {visible.map(item => {
+              const s = stockOf(item.id)
+              const soldOut = s && s.left <= 0
+              const inCart = cart.find(c => c.menu_item_id === item.id)?.qty || 0
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => add(item)}
+                  disabled={soldOut}
+                  className={`card flex min-h-[88px] min-w-0 flex-col justify-between text-left transition ${soldOut ? 'cursor-not-allowed opacity-50' : 'hover:ring-2 hover:ring-brand-orange active:scale-[0.98]'} ${s?.low && !soldOut ? 'ring-2 ring-amber-300' : ''}`}
+                >
+                  <span className="break-words font-bold leading-tight">{item.name}</span>
+                  <span className="mt-2 flex items-end justify-between gap-1">
+                    <span className="font-black text-brand-orange">{ghs(item.price)}</span>
+                    {s && (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${soldOut ? 'bg-red-100 text-red-700' : s.low ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {soldOut ? 'Sold out' : `${s.left - inCart} left`}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              )
+            })}
             {!visible.length && <div className="col-span-full p-8 text-center text-gray-400">No available items.</div>}
           </div>
         </section>
@@ -327,7 +351,7 @@ function PayModal({ method, cart, total, clientRef, newClientRef, onClose, onPai
       })
       onPaid(sale, method === 'cash' ? change : 0)
     } catch (err) {
-      if (err.code === 'ITEM_UNAVAILABLE') onMenuStale()
+      if (err.code === 'ITEM_UNAVAILABLE' || err.code === 'OUT_OF_STOCK') onMenuStale()
       setError(err.message)
       setBusy(false)
     }

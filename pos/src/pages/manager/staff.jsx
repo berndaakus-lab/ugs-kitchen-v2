@@ -47,6 +47,7 @@ export default function StaffPage() {
 const ROLE_HINT = {
   cashier: 'Sells and takes payments',
   server:  'Hands over food',
+  kitchen: 'Central kitchen: sends food to branches',
   manager: 'Every screen at this branch',
   admin:   'Every screen at every branch',
 }
@@ -54,7 +55,7 @@ const ROLE_HINT = {
 // Cashier and server can be combined (one person doing both). Manager and
 // admin already open every screen, so picking one of them clears the rest.
 function toggleRole(current, r) {
-  if (r === 'manager' || r === 'admin') return current.includes(r) ? [] : [r]
+  if (r === 'manager' || r === 'admin' || r === 'kitchen') return current.includes(r) ? [] : [r]
   const base = current.filter(x => x === 'cashier' || x === 'server')
   return base.includes(r) ? base.filter(x => x !== r) : [...base, r]
 }

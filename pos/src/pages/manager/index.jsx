@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import Layout, { ErrorText, Stat, StatusBadge } from '@/components/Layout'
 import VoidModal from '@/components/VoidModal'
 import { api, ghs, time, METHOD_LABEL, shownMethods, useBranchEvents, useMe } from '@/lib/client'
@@ -113,6 +114,8 @@ export default function Manager() {
                 ))}
               </div>
             </div>
+
+            {data.stock && <StockToday stock={data.stock} />}
           </>
         )}
 
@@ -163,5 +166,51 @@ export default function Manager() {
       </div>
       {voiding && <VoidModal sale={voiding} onClose={() => setVoiding(null)} onVoided={load} />}
     </Layout>
+  )
+}
+
+const qtyFmt = n => (Number.isInteger(Number(n)) ? Number(n) : Number(n).toFixed(1))
+
+// Today's stock at this branch (Module 2): short deliveries first, then each
+// tracked item's movement today and what's left.
+function StockToday({ stock }) {
+  return (
+    <div className="card space-y-3">
+      <div className="flex items-center gap-2">
+        <h2 className="font-black">Stock today</h2>
+        <Link href="/stock" className="ml-auto text-sm font-semibold text-brand-brown">Open stock →</Link>
+      </div>
+      {stock.short_deliveries.length > 0 && (
+        <div className="rounded-xl bg-red-50 p-3 text-sm text-red-800">
+          <div className="font-black">Short deliveries</div>
+          {stock.short_deliveries.map(d => (
+            <div key={d.id} className="mt-1">
+              Confirmed {new Date(d.received_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} by {d.received_by || '—'} (sent by {d.sent_by || 'kitchen'}):{' '}
+              {d.lines.map(l => `${l.name} ${qtyFmt(l.qty_received)} of ${qtyFmt(l.qty_sent)}`).join(', ')}
+            </div>
+          ))}
+        </div>
+      )}
+      {stock.items.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase text-gray-500">
+              <tr><th className="p-1.5">Item</th><th className="p-1.5 text-right">Received</th><th className="p-1.5 text-right">Sold</th><th className="p-1.5 text-right">Adjusted / count</th><th className="p-1.5 text-right">Left</th></tr>
+            </thead>
+            <tbody className="divide-y">
+              {stock.items.map(i => (
+                <tr key={i.id}>
+                  <td className="p-1.5 font-semibold">{i.name}</td>
+                  <td className="p-1.5 text-right">{qtyFmt(i.today.received)}</td>
+                  <td className="p-1.5 text-right">{qtyFmt(i.today.sold - i.today.returned)}</td>
+                  <td className={`p-1.5 text-right ${i.today.adjusted < 0 ? 'text-red-600' : ''}`}>{i.today.adjusted ? qtyFmt(i.today.adjusted) : '—'}</td>
+                  <td className={`p-1.5 text-right font-black ${i.status === 'out' ? 'text-red-600' : i.status === 'low' ? 'text-amber-700' : ''}`}>{qtyFmt(i.on_hand)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <p className="text-sm text-gray-400">No stock tracked yet.</p>}
+    </div>
   )
 }
