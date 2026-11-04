@@ -74,6 +74,20 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       return
     }
 
+    // Branch stock may have run out since the items were added.
+    const { data: stockRows, error: stockErr } = await supabase.rpc('menu_stock', { p_branch: currentBranch?.id })
+    if (!stockErr && stockRows?.length) {
+      const left = Object.fromEntries(stockRows.map(r => [r.menu_item_id, r.left]))
+      const short = items.find(i => left[i.id] != null && i.quantity > left[i.id])
+      if (short) {
+        const n = left[short.id]
+        setToastError(n > 0
+          ? `Only ${n} ${short.name} left — please reduce it in your cart.`
+          : `${short.name} is sold out — please remove it from your cart.`)
+        return
+      }
+    }
+
     // Validate all fields and show inline errors
     const errs = {}
     if (!name.trim())        errs.name = 'Please enter your name.'

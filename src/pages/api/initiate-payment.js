@@ -31,7 +31,23 @@ export default async function handler(req, res) {
 
   // Working hours are enforced here too, not just by greying out the menu:
   // a cart filled before closing time can't be paid for after it.
-  const { data: orderRow } = await supabase.from('orders').select('branch_id').eq('id', orderId).maybeSingle()
+  const { data: orderRow } = await supabase.from('orders').select('branch_id, items').eq('id', orderId).maybeSingle()
+
+  // Branch stock (POS Module 2): don't charge for food the branch no longer has.
+  // If stock isn't set up yet the check returns an error and we carry on as before.
+  if (orderRow?.branch_id) {
+    const cart = (orderRow.items || []).map(i => ({ menu_item_id: i.id, qty: Number(i.quantity) || 1 }))
+    const { data: problem } = await supabase.rpc('inv_cart_problem', { p_branch: orderRow.branch_id, p_items: cart })
+    const m = typeof problem === 'string' && problem.match(/^OUT_OF_STOCK:(.+):(-?\d+)$/)
+    if (m) {
+      const [, dish, n] = m
+      await markPaymentFailed(supabase, orderId, `Sold out: ${dish}`)
+      return res.status(409).json({
+        message: Number(n) > 0 ? `Only ${n} ${dish} left — please reduce it in your cart.` : `${dish} is sold out — please remove it from your cart.`,
+      })
+    }
+  }
+
   if (orderRow?.branch_id) {
     const { data: branch } = await supabase.from('branches').select('business_hours').eq('id', orderRow.branch_id).maybeSingle()
     if (branch && !isOpen(branch.business_hours)) {

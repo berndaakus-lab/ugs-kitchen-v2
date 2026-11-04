@@ -100,6 +100,27 @@ export default function Home() {
     loadMenu()
   }, [currentBranch])
 
+  // Branch stock (POS Module 2): how many of each tracked dish are left.
+  // Sold-out dishes are hidden; low ones say "Only X left". Dishes the shop
+  // doesn't track aren't in the list and show as normal. Re-checked every minute.
+  const [stock, setStock] = useState({})
+  useEffect(() => {
+    if (!currentBranch) return
+    let live = true
+    async function loadStock() {
+      const { data, error } = await supabase.rpc('menu_stock', { p_branch: currentBranch.id })
+      if (!live || error) return   // stock not set up yet → menu works as before
+      setStock(Object.fromEntries((data ?? []).map(r => [r.menu_item_id, r])))
+    }
+    loadStock()
+    const id = setInterval(loadStock, 60_000)
+    return () => { live = false; clearInterval(id) }
+  }, [currentBranch])
+
+  const shownItems = menuItems
+    .filter(i => !(stock[i.id] && stock[i.id].left <= 0))
+    .map(i => (stock[i.id] ? { ...i, stock_left: stock[i.id].left, stock_low: stock[i.id].low } : i))
+
   function handlePaymentSuccess(order) {
     setPaidOrder(order)
   }
@@ -253,7 +274,7 @@ export default function Home() {
         {/* Menu */}
         <main className="max-w-lg mx-auto">
           <MenuGrid
-            menuItems={menuItems}
+            menuItems={shownItems}
             categories={categories}
             loading={loading || branchLoading}
             disabled={!branchOpen}

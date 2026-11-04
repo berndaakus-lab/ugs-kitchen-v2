@@ -5,11 +5,12 @@ import { KeyRound, LogOut } from 'lucide-react'
 import { api, roleLabel, userRoles } from '@/lib/client'
 
 const NAV = {
-  cashier: [['/cashier', 'Sell'], ['/shift', 'My shift']],
-  server:  [['/server', 'Serve'], ['/shift', 'My report']],
-  manager: [['/manager', 'Today'], ['/cashier', 'Sell'], ['/server', 'Serve'], ['/shift', 'My shift'], ['/manager/customers', 'Customers'], ['/manager/staff', 'Staff']],
+  cashier: [['/cashier', 'Sell'], ['/stock', 'Stock'], ['/shift', 'My shift']],
+  server:  [['/server', 'Serve'], ['/stock', 'Stock'], ['/shift', 'My report']],
+  manager: [['/manager', 'Today'], ['/cashier', 'Sell'], ['/server', 'Serve'], ['/stock', 'Stock'], ['/shift', 'My shift'], ['/manager/customers', 'Customers'], ['/manager/staff', 'Staff']],
+  kitchen: [['/kitchen', 'Kitchen']],
 }
-NAV.admin = NAV.manager
+NAV.admin = [...NAV.manager, ['/kitchen', 'Kitchen']]
 
 // Menu for everything the person may do, e.g. cashier + server → Sell, Serve, My shift.
 function navFor(user) {

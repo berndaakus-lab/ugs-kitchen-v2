@@ -69,6 +69,11 @@ function MenuCard({ item, disabled }) {
 
   const hasImage = item.image && !imgError
   const unavailable = !item.is_available || disabled
+  // `disabled` = branch closed; `is_available` off = out of stock (set in admin).
+  const offLabel = item.is_available ? 'Closed' : 'Out of Stock'
+  // Branch stock (POS): stock_left is set only for dishes the shop tracks.
+  const tracked = item.stock_left != null
+  const atLimit = tracked && qty >= item.stock_left
 
   return (
     <div className={`bg-white rounded-2xl overflow-hidden shadow-sm border border-brand-muted flex flex-col transition-transform ${unavailable ? 'opacity-70' : 'active:scale-95'}`}>
@@ -87,7 +92,11 @@ function MenuCard({ item, disabled }) {
         )}
         {unavailable ? (
           <span className="absolute top-2 left-2 bg-gray-800/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
-            Out of Stock
+            {offLabel}
+          </span>
+        ) : item.stock_low ? (
+          <span className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+            Only {item.stock_left} left
           </span>
         ) : item.is_popular && (
           <span className="absolute top-2 left-2 bg-brand-orange text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
@@ -115,7 +124,7 @@ function MenuCard({ item, disabled }) {
       <div className="px-3 pb-3">
         {unavailable ? (
           <div className="w-full flex items-center justify-center bg-gray-100 text-gray-400 font-bold rounded-xl py-2.5 text-xs">
-            Not Available
+            {item.is_available ? 'Closed now' : 'Not Available'}
           </div>
         ) : qty === 0 ? (
           <button
@@ -136,7 +145,9 @@ function MenuCard({ item, disabled }) {
             <span className="font-extrabold text-brand-dark text-base w-6 text-center">{qty}</span>
             <button
               onClick={() => addItem(item)}
-              className="w-8 h-8 flex items-center justify-center rounded-lg bg-brand-brown text-white shadow-sm active:bg-brand-dark"
+              disabled={atLimit}
+              aria-label={atLimit ? `Only ${item.stock_left} left` : 'Add one more'}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-brand-brown text-white shadow-sm active:bg-brand-dark disabled:opacity-40"
             >
               <Plus size={14} strokeWidth={3} />
             </button>
