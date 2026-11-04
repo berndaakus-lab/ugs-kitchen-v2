@@ -91,13 +91,13 @@ function SendForm({ data, onSent }) {
               <div className="min-w-[8rem] flex-1 font-bold">{item.name}</div>
               {item.batch_yield && (
                 <label className="flex items-center gap-1 text-sm">
-                  <input className="input w-20 px-2 py-1.5 text-base" type="number" min="0" step="0.5" inputMode="decimal"
+                  <input className="input w-20 px-2 py-1.5 text-base" type="number" min="0" step="any" inputMode="decimal"
                     value={l.batches ?? ''} onChange={e => setBatches(i, e.target.value)} placeholder="0" />
                   <span className="text-gray-500">× {item.batch_label || 'batch'} (= {fmt(Number(item.batch_yield))} {item.unit}s)</span>
                 </label>
               )}
               <label className="flex items-center gap-1 text-sm">
-                <input className="input w-24 px-2 py-1.5 text-base font-bold" type="number" min="0" step="1" inputMode="decimal"
+                <input className="input w-24 px-2 py-1.5 text-base font-bold" type="number" min="0" step="any" inputMode="decimal"
                   value={l.qty} onChange={e => set(i, { qty: e.target.value, batches: '' })} placeholder="0" />
                 <span className="text-gray-500">{item.unit}s</span>
               </label>

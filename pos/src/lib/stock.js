@@ -2,7 +2,7 @@
 // in migrations/pos_007_branch_stock.sql.
 import { db, rpc, staffNames } from './supabaseAdmin'
 
-export const UNITS = ['plate', 'piece', 'pack', 'portion', 'kg', 'litre', 'bottle']
+export const UNITS = ['plate', 'piece', 'pack', 'portion', 'scoop', 'can', 'kg', 'litre', 'bottle']
 const SOLD = ['sale', 'online_sale']
 
 export const branchLocation = branchId => rpc('inv_branch_location', { p_branch: branchId })

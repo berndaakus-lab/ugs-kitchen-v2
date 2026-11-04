@@ -151,7 +151,7 @@ function ReceiveModal({ dispatch, onClose, onDone }) {
           <div key={l.id} className="flex items-center gap-2">
             <div className="min-w-0 flex-1 font-semibold">{l.name}<div className="text-xs font-normal text-gray-500">sent {fmt(l.qty_sent)} {l.unit}s</div></div>
             <input className={`input w-24 py-2 text-right text-lg font-bold ${Number(got[l.id]) < l.qty_sent ? 'border-red-400 text-red-700' : ''}`}
-              type="number" min="0" step="1" inputMode="decimal" value={got[l.id]} onChange={e => setGot(g => ({ ...g, [l.id]: e.target.value }))} />
+              type="number" min="0" step="any" inputMode="decimal" value={got[l.id]} onChange={e => setGot(g => ({ ...g, [l.id]: e.target.value }))} />
           </div>
         ))}
         {short && <div className="rounded-xl bg-red-50 p-2 text-sm font-semibold text-red-700">Less than sent — this will be flagged to the owner.</div>}
@@ -210,7 +210,7 @@ function CountModal({ items, onClose, onDone }) {
           {items.map(i => (
             <div key={i.id} className="flex items-center gap-2">
               <div className="min-w-0 flex-1 font-semibold">{i.name} <span className="text-xs font-normal text-gray-500">({i.unit}s)</span></div>
-              <input className="input w-24 py-2 text-right text-lg font-bold" type="number" min="0" step="1" inputMode="decimal" placeholder="—"
+              <input className="input w-24 py-2 text-right text-lg font-bold" type="number" min="0" step="any" inputMode="decimal" placeholder="—"
                 value={counted[i.id] ?? ''} onChange={e => setCounted(c => ({ ...c, [i.id]: e.target.value }))} />
             </div>
           ))}
@@ -249,7 +249,7 @@ function AdjustModal({ item, onClose, onDone }) {
             <button type="button" key={k} onClick={() => setKind(k)} className={`btn ${kind === k ? 'bg-brand-dark text-white' : 'border border-brand-muted bg-white'}`}>{label}</button>
           ))}
         </div>
-        <input className="input py-2" type="number" step="1" inputMode="decimal"
+        <input className="input py-2" type="number" step="any" inputMode="decimal"
           placeholder={kind === 'waste' ? `How many ${item.unit}s were wasted` : 'Add (+) or remove (−), e.g. -2'}
           value={qty} onChange={e => setQty(e.target.value)} />
         <input className="input py-2" placeholder="Reason (required)" value={note} onChange={e => setNote(e.target.value)} />

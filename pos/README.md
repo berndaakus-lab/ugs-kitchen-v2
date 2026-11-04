@@ -36,6 +36,8 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
 - **What each dish uses** (`/manager/stock`): stock items, and links from each dish to what it uses.
   - Example: Assorted Fried Rice = 1 fried-rice base + 1 chicken + 1 sausage.
   - **Link dishes automatically** links every untracked dish 1:1 to a stock item with the same name.
+  - Quantities can be fractions, matching the kitchen's portion sheet: 3 scoops rice + 5 eggs + 0.2 can beef; 0.33 pack spaghetti.
+  - **Copy links from another dish** starts from a dish with the same protein set. The admin can tick **Same at every branch** to save the recipe for that dish name at all branches in one go.
   - A dish with **no links is untracked** and sells exactly as before, so tracking can be rolled out dish by dish.
 - **Selling:**
   - Every walk-in sale (cash at payment, MoMo when the money arrives) and every paid online order takes stock off. Voids and cancelled online orders put it back.
@@ -58,6 +60,7 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
       - A MoMo sale only becomes a real sale, with a ticket number, once Paystack confirms the money.
       - Failed or cancelled MoMo attempts are deleted, with a `momo_not_paid` line kept in `pos_audit_log` (it holds the Paystack reference).
    7. `../migrations/pos_007_branch_stock.sql`: Module 2, central kitchen and branch stock (see below). It adds a trigger on the online `orders` table so paid orders take stock off. No columns are changed.
+   8. `../migrations/pos_008_stock_units.sql`: adds the **scoop** and **can** units (rice by the scoop, corned beef by the tenth of a can).
 
    If you ever re-run an earlier migration, re-run the later ones after it, in order.
 

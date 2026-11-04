@@ -95,7 +95,11 @@ export default function StockSetup() {
         )}
       </div>
       {editingItem && <ItemModal item={editingItem} units={data.units} onClose={() => setEditingItem(null)} onSaved={() => { setEditingItem(null); load() }} />}
-      {editingDish && <LinksModal dish={editingDish} items={data.items.filter(i => i.is_active)} onClose={() => setEditingDish(null)} onSaved={() => { setEditingDish(null); load() }} />}
+      {editingDish && (
+        <LinksModal dish={editingDish} dishes={data.dishes} items={data.items.filter(i => i.is_active)} isAdmin={me.user.role === 'admin'}
+          onClose={() => setEditingDish(null)}
+          onSaved={n => { setMsg(n > 1 ? `Saved for ${editingDish.name} at ${n} branches.` : ''); setEditingDish(null); load() }} />
+      )}
     </Layout>
   )
 }
@@ -144,19 +148,31 @@ function ItemModal({ item, units, onClose, onSaved }) {
   )
 }
 
-function LinksModal({ dish, items, onClose, onSaved }) {
+function LinksModal({ dish, dishes, items, isAdmin, onClose, onSaved }) {
   const [links, setLinks] = useState(dish.links.map(l => ({ ...l, qty: String(l.qty) })))
+  const [allBranches, setAllBranches] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const unused = items.filter(i => !links.some(l => l.stock_item_id === i.id))
   const byId = Object.fromEntries(items.map(i => [i.id, i]))
+  // Dishes that share a recipe ("protein same as Special Chicken Fried Rice"):
+  // start from another dish's links, then change the base.
+  const others = dishes.filter(d => d.id !== dish.id && d.links.length)
+
+  function copyFrom(id) {
+    const src = others.find(d => d.id === id)
+    if (src) setLinks(src.links.filter(l => byId[l.stock_item_id]).map(l => ({ ...l, qty: String(l.qty) })))
+  }
 
   async function save(e) {
     e.preventDefault()
     setBusy(true); setError('')
     try {
-      await api('stock/setup', { method: 'POST', body: { action: 'set_links', menu_item_id: dish.id, links: links.map(l => ({ stock_item_id: l.stock_item_id, qty: Number(l.qty) })) } })
-      onSaved()
+      const r = await api('stock/setup', { method: 'POST', body: {
+        action: 'set_links', menu_item_id: dish.id, all_branches: isAdmin && allBranches,
+        links: links.map(l => ({ stock_item_id: l.stock_item_id, qty: Number(l.qty) })),
+      } })
+      onSaved(r.dishes)
     } catch (err) {
       setError(err.message); setBusy(false)
     }
@@ -167,7 +183,7 @@ function LinksModal({ dish, items, onClose, onSaved }) {
       <form onSubmit={save} className="space-y-3">
         {links.map((l, i) => (
           <div key={l.stock_item_id} className="flex items-center gap-2">
-            <input className="input w-20 py-2 text-right font-bold" type="number" min="0" step="0.5" value={l.qty}
+            <input className="input w-20 py-2 text-right font-bold" type="number" min="0" step="any" value={l.qty}
               onChange={e => setLinks(ls => ls.map((x, n) => (n === i ? { ...x, qty: e.target.value } : x)))} />
             <span className="min-w-0 flex-1 text-sm">{byId[l.stock_item_id]?.unit}{Number(l.qty) === 1 ? '' : 's'} of <b>{byId[l.stock_item_id]?.name}</b></span>
             <button type="button" className="p-2 text-red-600" onClick={() => setLinks(ls => ls.filter((_, n) => n !== i))} aria-label="Remove"><Trash2 size={16} /></button>
@@ -179,6 +195,19 @@ function LinksModal({ dish, items, onClose, onSaved }) {
             <option value="">+ Add what it uses…</option>
             {unused.map(i => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
           </select>
+        )}
+        {others.length > 0 && (
+          <select className="input py-2 text-base" value="" onChange={e => e.target.value && copyFrom(e.target.value)}>
+            <option value="">Copy links from another dish…</option>
+            {others.map(d => <option key={d.id} value={d.id}>{d.name} ({ghs(d.price)})</option>)}
+          </select>
+        )}
+        <p className="text-xs text-gray-500">Fractions are fine: 0.1 can of beef, 2.5 scoops of rice, 0.33 pack of spaghetti.</p>
+        {isAdmin && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={allBranches} onChange={e => setAllBranches(e.target.checked)} />
+            Same for “{dish.name}” at every branch
+          </label>
         )}
         <ErrorText>{error}</ErrorText>
         <button className="btn-primary w-full" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
