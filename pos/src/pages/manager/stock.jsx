@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Link2, Plus, Trash2, Wand2 } from 'lucide-react'
+import { Link2, Plus, Search, Trash2, Wand2, X } from 'lucide-react'
 import Layout, { ErrorText, Modal } from '@/components/Layout'
 import { api, ghs, useMe } from '@/lib/client'
 
@@ -15,6 +15,7 @@ export default function StockSetup() {
   const [editingDish, setEditingDish] = useState(null)
   const [msg, setMsg] = useState('')
   const [error, setError] = useState('')
+  const [q, setQ] = useState('')
 
   const load = useCallback(() => api('stock/setup').then(setData).catch(e => setError(e.message)), [])
   useEffect(() => { if (me) load() }, [me, load])
@@ -32,6 +33,15 @@ export default function StockSetup() {
   }
 
   const untracked = data?.dishes.filter(d => !d.links.length).length ?? 0
+  // Search by dish name or by what it uses ("beef" finds every dish with beef in it).
+  const shown = useMemo(() => {
+    const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (!data || !words.length) return data?.dishes || []
+    return data.dishes.filter(d => {
+      const text = [d.name, ...d.links.map(l => itemsById[l.stock_item_id]?.name || ''), d.links.length ? '' : 'not tracked'].join(' ').toLowerCase()
+      return words.every(w => text.includes(w))
+    })
+  }, [data, q, itemsById])
 
   return (
     <Layout me={me}>
@@ -77,8 +87,18 @@ export default function StockSetup() {
                 A dish made at the branch from several things (e.g. Assorted Fried Rice) should use each of them — edit its links.
                 A dish with no links is not tracked and always sells.
               </p>
+              <div className="relative mb-1">
+                <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input className="input py-2 pl-10 pr-10 text-base" type="text" placeholder="Search dishes, e.g. “egg boss” or “beef”"
+                  value={q} onChange={e => setQ(e.target.value)} />
+                {q && (
+                  <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400" onClick={() => setQ('')} aria-label="Clear search"><X size={18} /></button>
+                )}
+              </div>
+              {q && <p className="text-xs text-gray-500">{shown.length} of {data.dishes.length} dishes</p>}
               <div className="divide-y text-sm">
-                {data.dishes.map(d => (
+                {q && !shown.length && <div className="py-3 text-gray-400">No dish matches “{q}”.</div>}
+                {shown.map(d => (
                   <div key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                     <b className="min-w-0 flex-1">{d.name} <span className="font-normal text-gray-500">{ghs(d.price)}</span></b>
                     <span className="text-gray-600">
