@@ -116,8 +116,8 @@ export default function StockSetup() {
       </div>
       {editingItem && <ItemModal item={editingItem} units={data.units} onClose={() => setEditingItem(null)} onSaved={() => { setEditingItem(null); load() }} />}
       {editingDish && (
-        <LinksModal dish={editingDish} dishes={data.dishes} items={data.items.filter(i => i.is_active)} isAdmin={me.user.role === 'admin'}
-          onClose={() => setEditingDish(null)}
+        <LinksModal dish={editingDish} dishes={data.dishes} items={data.items.filter(i => i.is_active)} units={data.units} isAdmin={me.user.role === 'admin'}
+          onClose={() => { setEditingDish(null); load() }}
           onSaved={n => { setMsg(n > 1 ? `Saved for ${editingDish.name} at ${n} branches.` : ''); setEditingDish(null); load() }} />
       )}
     </Layout>
@@ -168,9 +168,11 @@ function ItemModal({ item, units, onClose, onSaved }) {
   )
 }
 
-function LinksModal({ dish, dishes, items, isAdmin, onClose, onSaved }) {
+function LinksModal({ dish, dishes, items: initialItems, units, isAdmin, onClose, onSaved }) {
+  const [items, setItems] = useState(initialItems)
   const [links, setLinks] = useState(dish.links.map(l => ({ ...l, qty: String(l.qty) })))
   const [allBranches, setAllBranches] = useState(true)
+  const [newItem, setNewItem] = useState(null)   // {name, unit} while creating one here
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const unused = items.filter(i => !links.some(l => l.stock_item_id === i.id))
@@ -184,8 +186,23 @@ function LinksModal({ dish, dishes, items, isAdmin, onClose, onSaved }) {
     if (src) setLinks(src.links.filter(l => byId[l.stock_item_id]).map(l => ({ ...l, qty: String(l.qty) })))
   }
 
+  // Create a stock item without leaving the dish, and add it straight away.
+  async function createItem() {
+    setBusy(true); setError('')
+    try {
+      const { item } = await api('stock/setup', { method: 'POST', body: { action: 'save_item', item: { name: newItem.name, unit: newItem.unit, low_level: 5 } } })
+      setItems(is => [...is, item].sort((a, b) => a.name.localeCompare(b.name)))
+      setLinks(ls => [...ls, { stock_item_id: item.id, qty: '1' }])
+      setNewItem(null)
+    } catch (err) {
+      setError(err.message)
+    }
+    setBusy(false)
+  }
+
   async function save(e) {
     e.preventDefault()
+    if (newItem) return createItem()
     setBusy(true); setError('')
     try {
       const r = await api('stock/setup', { method: 'POST', body: {
@@ -203,26 +220,54 @@ function LinksModal({ dish, dishes, items, isAdmin, onClose, onSaved }) {
       <form onSubmit={save} className="space-y-3">
         {links.map((l, i) => (
           <div key={l.stock_item_id} className="flex items-center gap-2">
-            <input className="input w-20 py-2 text-right font-bold" type="number" min="0" step="any" value={l.qty}
+            <input className="input w-20 py-2 text-right font-bold" type="number" min="0" step="any" inputMode="decimal" value={l.qty}
               onChange={e => setLinks(ls => ls.map((x, n) => (n === i ? { ...x, qty: e.target.value } : x)))} />
             <span className="min-w-0 flex-1 text-sm">{byId[l.stock_item_id]?.unit}{Number(l.qty) === 1 ? '' : 's'} of <b>{byId[l.stock_item_id]?.name}</b></span>
             <button type="button" className="p-2 text-red-600" onClick={() => setLinks(ls => ls.filter((_, n) => n !== i))} aria-label="Remove"><Trash2 size={16} /></button>
           </div>
         ))}
-        {!links.length && <p className="text-sm text-gray-500">Not tracked — this dish always sells.</p>}
-        {unused.length > 0 && (
+        {!links.length && (
+          <p className="text-sm text-gray-500">
+            Not tracked yet — this dish always sells.{' '}
+            {items.length ? 'Add what one plate uses below.' : 'There are no stock items yet: create the first one below (e.g. “Fried rice”, counted in scoops).'}
+          </p>
+        )}
+        {links.length > 0 && (
+          <p className="text-xs text-gray-500">Amounts can be fractions, e.g. 3 scoops of rice, 0.2 can of beef (2/10), 0.33 pack of spaghetti (1/3).</p>
+        )}
+
+        {unused.length > 0 && !newItem && (
           <select className="input py-2 text-base" value="" onChange={e => e.target.value && setLinks(ls => [...ls, { stock_item_id: e.target.value, qty: '1' }])}>
             <option value="">+ Add what it uses…</option>
             {unused.map(i => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
           </select>
         )}
-        {others.length > 0 && (
+        {newItem ? (
+          <div className="space-y-2 rounded-xl border border-gray-200 p-3">
+            <div className="text-sm font-bold">New stock item</div>
+            <input className="input py-2 text-base" placeholder="Name, e.g. Fried rice" autoFocus value={newItem.name}
+              onChange={e => setNewItem(n => ({ ...n, name: e.target.value }))} />
+            <select className="input py-2 text-base" value={newItem.unit} onChange={e => setNewItem(n => ({ ...n, unit: e.target.value }))}>
+              {units.map(u => <option key={u} value={u}>counted in {u}s</option>)}
+            </select>
+            <div className="flex gap-2">
+              <button type="button" className="btn-ghost flex-1 py-2" onClick={() => setNewItem(null)}>Cancel</button>
+              <button type="button" className="btn-primary flex-1 py-2" disabled={busy || !newItem.name.trim()} onClick={createItem}>Add</button>
+            </div>
+            <p className="text-xs text-gray-500">Bag size and low-stock level can be set later under Stock items.</p>
+          </div>
+        ) : (
+          <button type="button" className="text-sm font-semibold text-brand-brown" onClick={() => setNewItem({ name: '', unit: 'scoop' })}>
+            <Plus size={14} className="inline" /> New stock item
+          </button>
+        )}
+
+        {others.length > 0 && !newItem && (
           <select className="input py-2 text-base" value="" onChange={e => e.target.value && copyFrom(e.target.value)}>
             <option value="">Copy links from another dish…</option>
             {others.map(d => <option key={d.id} value={d.id}>{d.name} ({ghs(d.price)})</option>)}
           </select>
         )}
-        <p className="text-xs text-gray-500">Fractions are fine: 0.1 can of beef, 2.5 scoops of rice, 0.33 pack of spaghetti.</p>
         {isAdmin && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={allBranches} onChange={e => setAllBranches(e.target.checked)} />
@@ -230,7 +275,7 @@ function LinksModal({ dish, dishes, items, isAdmin, onClose, onSaved }) {
           </label>
         )}
         <ErrorText>{error}</ErrorText>
-        <button className="btn-primary w-full" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+        <button className="btn-primary w-full" disabled={busy || !!newItem}>{busy ? 'Saving…' : 'Save'}</button>
       </form>
     </Modal>
   )
