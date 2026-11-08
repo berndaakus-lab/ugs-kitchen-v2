@@ -2,6 +2,7 @@
 // Saves or updates a push subscription endpoint for admin or customer.
 
 import { createClient } from '@supabase/supabase-js'
+import { readStaff, checkOrderToken } from '../../../lib/webSession'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -11,13 +12,18 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { subscription, role, orderId } = req.body ?? {}
+  const { subscription, role, orderId, token } = req.body ?? {}
   if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
     return res.status(400).json({ message: 'Invalid subscription object' })
   }
   if (!['admin', 'customer'].includes(role)) {
     return res.status(400).json({ message: 'role must be admin or customer' })
   }
+
+  // Admin alerts carry customer names and amounts: signed-in staff only.
+  // Order updates: only whoever holds that order's token (the person who placed it).
+  if (role === 'admin' && !(await readStaff(req))) return res.status(401).json({ message: 'Please sign in.' })
+  if (role === 'customer' && !checkOrderToken(orderId, token)) return res.status(403).json({ message: 'Not allowed.' })
 
   const record = {
     endpoint: subscription.endpoint,

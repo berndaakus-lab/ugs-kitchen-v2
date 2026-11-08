@@ -14,7 +14,7 @@ export function BranchProvider({ children }) {
   const fetchBranches = useCallback(async () => {
     const { data } = await supabase
       .from('branches')
-      .select('*')
+      .select('id, name, slug, address, phone, whatsapp, delivery_locations, is_active, sort_order, created_at, business_hours')   // sms_recipients is staff-only
       .eq('is_active', true)
       .order('sort_order')
     return data ?? []

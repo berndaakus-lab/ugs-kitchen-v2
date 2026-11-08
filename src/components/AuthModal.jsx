@@ -10,7 +10,7 @@ function formatPhone(raw) {
 }
 
 export default function AuthModal({ onClose }) {
-  const { signInByPhone, signInByCredentials, signUp } = useAuth()
+  const { requestCode, verifyCode, signInByCredentials } = useAuth()
   const [tab,          setTab]          = useState('signin') // 'signin' | 'credentials' | 'signup'
   const [name,         setName]         = useState('')
   const [phone,        setPhone]        = useState('')
@@ -27,15 +27,34 @@ export default function AuthModal({ onClose }) {
   const [fpDone,       setFpDone]       = useState(false)
   const [fpError,      setFpError]      = useState('')
 
-  function switchTab(t) { setTab(t); setError('') }
+  // Phone sign-in and sign-up send a 6-digit code by SMS first.
+  const [codeSent,     setCodeSent]     = useState(false)
+  const [code,         setCode]         = useState('')
 
-  async function handleSignIn(e) {
-    e.preventDefault()
+  function switchTab(t) { setTab(t); setError(''); setCodeSent(false); setCode('') }
+
+  // Step 1 sends the code; step 2 checks it. Used by both phone tabs.
+  async function handlePhoneStep(mode) {
     setError(''); setLoading(true)
-    const result = await signInByPhone(phone.replace(/\s/g, ''))
+    const result = codeSent
+      ? await verifyCode(phone, code)
+      : await requestCode(phone, mode, name)
     setLoading(false)
     if (result.error) return setError(result.error)
+    if (!codeSent) { setCodeSent(true); return }
     onClose()
+  }
+
+  async function resendCode(mode) {
+    setError(''); setCode(''); setLoading(true)
+    const result = await requestCode(phone, mode, name)
+    setLoading(false)
+    if (result.error) setError(result.error)
+  }
+
+  function handleSignIn(e) {
+    e.preventDefault()
+    handlePhoneStep('signin')
   }
 
   async function handleCredentials(e) {
@@ -47,14 +66,28 @@ export default function AuthModal({ onClose }) {
     onClose()
   }
 
-  async function handleSignUp(e) {
+  function handleSignUp(e) {
     e.preventDefault()
-    setError(''); setLoading(true)
-    const result = await signUp(name, phone.replace(/\s/g, ''))
-    setLoading(false)
-    if (result.error) return setError(result.error)
-    onClose()
+    handlePhoneStep('signup')
   }
+
+  // The code box shown under the phone number once an SMS has been sent.
+  const codeBox = mode => codeSent && (
+    <div>
+      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Code from SMS</label>
+      <input type="text" inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={6}
+        value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        placeholder="6-digit code"
+        className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-center text-lg font-bold tracking-[0.4em] outline-none focus:border-brand-orange transition-colors"
+      />
+      <p className="text-[11px] text-gray-400 mt-1">
+        We sent a code to {phone}.{' '}
+        <button type="button" onClick={() => resendCode(mode)} disabled={loading} className="text-brand-orange font-semibold">Send again</button>
+        {' · '}
+        <button type="button" onClick={() => { setCodeSent(false); setCode(''); setError('') }} className="text-brand-orange font-semibold">Change number</button>
+      </p>
+    </div>
+  )
 
   async function handleForgotPassword(e) {
     e.preventDefault()
@@ -191,7 +224,7 @@ export default function AuthModal({ onClose }) {
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Phone Number</label>
               <div className="relative">
                 <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input type="tel" inputMode="numeric"
+                <input type="tel" inputMode="numeric" readOnly={codeSent}
                   value={phone} onChange={e => setPhone(formatPhone(e.target.value))}
                   placeholder="024 XXX XXXX"
                   className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 text-base font-semibold tracking-widest outline-none focus:border-brand-orange transition-colors"
@@ -199,10 +232,11 @@ export default function AuthModal({ onClose }) {
               </div>
               <p className="text-[11px] text-gray-400 mt-1">Valid 10-digit Ghana number</p>
             </div>
+            {codeBox('signin')}
             {error && <p className="text-red-500 text-sm font-semibold bg-red-50 rounded-xl px-4 py-3">{error}</p>}
             <button type="submit" disabled={loading}
               className="w-full flex items-center justify-center gap-2 bg-brand-brown text-white font-extrabold rounded-2xl py-4 text-base disabled:opacity-60">
-              <LogIn size={18} /> {loading ? 'Signing in…' : 'Sign In'}
+              <LogIn size={18} /> {loading ? (codeSent ? 'Checking…' : 'Sending code…') : codeSent ? 'Sign In' : 'Send me a code'}
             </button>
           </form>
         )}
@@ -261,7 +295,7 @@ export default function AuthModal({ onClose }) {
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Your Name</label>
               <div className="relative">
                 <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input type="text" value={name} onChange={e => setName(e.target.value)}
+                <input type="text" value={name} readOnly={codeSent} onChange={e => setName(e.target.value)}
                   placeholder="e.g. Kwame Mensah"
                   className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 text-base font-semibold outline-none focus:border-brand-orange transition-colors"
                 />
@@ -271,7 +305,7 @@ export default function AuthModal({ onClose }) {
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Phone Number</label>
               <div className="relative">
                 <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input type="tel" inputMode="numeric"
+                <input type="tel" inputMode="numeric" readOnly={codeSent}
                   value={phone} onChange={e => setPhone(formatPhone(e.target.value))}
                   placeholder="024 XXX XXXX"
                   className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 text-base font-semibold tracking-widest outline-none focus:border-brand-orange transition-colors"
@@ -279,10 +313,11 @@ export default function AuthModal({ onClose }) {
               </div>
               <p className="text-[11px] text-gray-400 mt-1">Valid 10-digit Ghana number</p>
             </div>
+            {codeBox('signup')}
             {error && <p className="text-red-500 text-sm font-semibold bg-red-50 rounded-xl px-4 py-3">{error}</p>}
             <button type="submit" disabled={loading}
               className="w-full flex items-center justify-center gap-2 bg-brand-brown text-white font-extrabold rounded-2xl py-4 text-base disabled:opacity-60">
-              <UserPlus size={18} /> {loading ? 'Creating…' : 'Create Account'}
+              <UserPlus size={18} /> {loading ? (codeSent ? 'Creating…' : 'Sending code…') : codeSent ? 'Create Account' : 'Send me a code'}
             </button>
           </form>
         )}

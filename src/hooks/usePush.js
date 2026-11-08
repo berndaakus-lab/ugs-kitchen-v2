@@ -12,7 +12,7 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)))
 }
 
-async function subscribe(role, orderId) {
+async function subscribe(role, orderId, token) {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return
   if (!VAPID_PUBLIC_KEY) return
 
@@ -32,7 +32,7 @@ async function subscribe(role, orderId) {
     await fetch('/api/push/subscribe', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ subscription: sub.toJSON(), role, orderId }),
+      body:    JSON.stringify({ subscription: sub.toJSON(), role, orderId, token }),
     })
   } catch (err) {
     console.warn('[usePush] subscription failed:', err.message)
@@ -46,8 +46,8 @@ export function useAdminPush(enabled) {
   }, [enabled])
 }
 
-export function useCustomerPush(orderId) {
+export function useCustomerPush(orderId, token) {
   useEffect(() => {
-    if (orderId) subscribe('customer', orderId)
-  }, [orderId])
+    if (orderId && token) subscribe('customer', orderId, token)
+  }, [orderId, token])
 }

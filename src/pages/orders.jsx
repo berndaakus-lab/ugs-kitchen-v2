@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { ArrowLeft, ShoppingBag, RotateCcw, Clock, CheckCircle2, XCircle, Loader2, UtensilsCrossed } from 'lucide-react'
 import Link from 'next/link'
-import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 
@@ -116,38 +115,14 @@ export default function OrdersPage() {
   }, [authLoading, isLoggedIn])
 
   async function loadOrders() {
-    const { data } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('momo_number', customer.phone)
-      .order('created_at', { ascending: false })
-      .limit(50)
+    const res = await fetch('/api/customer/orders')
+    if (res.status === 401) { router.replace('/?signin=1'); return }
+    const data = res.ok ? (await res.json()).orders : []
     setOrders(data ?? [])
     setLoading(false)
   }
 
-  // Realtime: listen to order updates and patch into local state
-  useEffect(() => {
-    if (!isLoggedIn || !customer || orders.length === 0) return
-
-    const channel = supabase
-      .channel(`customer-orders-${customer.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders' },
-        payload => {
-          setOrders(prev =>
-            prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o)
-          )
-        }
-      )
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn, customer, orders.length])
-
-  // Fallback poll every 10s for active orders in case Realtime misses an update
+  // Active orders refresh every 10 s (the server only returns this customer's own orders)
   useEffect(() => {
     if (!isLoggedIn || !customer) return
     const hasActive = orders.some(o => ['paid', 'preparing'].includes(o.status))
@@ -159,10 +134,8 @@ export default function OrdersPage() {
         .map(o => o.id)
       if (activeIds.length === 0) return
 
-      const { data } = await supabase
-        .from('orders')
-        .select('*')
-        .in('id', activeIds)
+      const res = await fetch(`/api/customer/orders?ids=${activeIds.join(',')}`)
+      const data = res.ok ? (await res.json()).orders : null
 
       if (data) {
         setOrders(prev =>

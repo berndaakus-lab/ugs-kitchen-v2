@@ -5,6 +5,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createHash, randomUUID } from 'crypto'
 import { sendSMS, toInternational, STATUS_SMS, msgOrderDeliveredWithToken } from '../../../lib/sms'
+import { withStaff } from '../../../lib/webSession'
 import { pushCustomer } from '../../../lib/push'
 
 const supabase = createClient(
@@ -12,12 +13,27 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { orderId, status, wait_time_minutes, delivered_by, delivered_by_id, actioned_by, actioned_by_id } = req.body ?? {}
+  const { orderId, status, wait_time_minutes } = req.body ?? {}
   if (!orderId || (!status && wait_time_minutes == null)) {
     return res.status(400).json({ message: 'Missing orderId or update fields' })
+  }
+  // Who did it comes from the login, never from the browser.
+  const me = req.user
+  if (status && !['paid', 'preparing', 'ready', 'delivered', 'failed', 'cancelled'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid status' })
+  }
+  if (status === 'paid' && me.role !== 'admin') {
+    return res.status(403).json({ message: 'Only the admin can mark an order paid.' })
+  }
+  if (me.role === 'delivery' && (status !== 'delivered' || wait_time_minutes != null)) {
+    return res.status(403).json({ message: 'Delivery can only mark orders delivered.' })
+  }
+  if (me.role !== 'admin' && me.branch_id) {
+    const { data: own } = await supabase.from('orders').select('branch_id').eq('id', orderId).maybeSingle()
+    if (!own || own.branch_id !== me.branch_id) return res.status(404).json({ message: 'Order not found' })
   }
 
   // For wait_time_minutes-only updates we don't need SMS, skip the fetch
@@ -42,16 +58,16 @@ export default async function handler(req, res) {
   const updates = { status }
   if (wait_time_minutes != null) updates.wait_time_minutes = parseInt(wait_time_minutes)
   // Log who actioned this status change
-  if (actioned_by)    updates.actioned_by    = actioned_by
-  if (actioned_by_id) updates.actioned_by_id = actioned_by_id
+  updates.actioned_by    = me.name
+  updates.actioned_by_id = me.id ?? null
   updates.actioned_at = new Date().toISOString()
   if (status === 'ready' && !order.reminded_at) {
     updates.reminded_at = new Date().toISOString()
   }
   if (status === 'delivered') {
     updates.delivered_at    = new Date().toISOString()
-    if (delivered_by)    updates.delivered_by    = delivered_by
-    if (delivered_by_id) updates.delivered_by_id = delivered_by_id
+    updates.delivered_by    = me.name
+    updates.delivered_by_id = me.id ?? null
     // Generate a one-time review token so the SMS link is unique and expiring
     updates.review_token = randomUUID()
   }
@@ -104,3 +120,6 @@ export default async function handler(req, res) {
 
   return res.status(200).json({ ok: true })
 }
+
+// Signed-in staff only (staff, delivery).
+export default withStaff(handler, { roles: ["staff","delivery"] })

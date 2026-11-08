@@ -3,16 +3,13 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { sendSMS, toInternational } from '../../lib/sms'
+import { generatePassword } from '../../lib/customerAuth'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-function generatePassword() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  return 'UGS-' + Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -33,6 +30,13 @@ export default async function handler(req, res) {
     // Don't reveal whether the number exists — just return success
     return res.status(200).json({ ok: true })
   }
+
+  // One reset per number per 10 minutes, so nobody can flood a customer with
+  // resets (each one changes their password).
+  const key = 'reset:' + clean
+  const { data: last } = await supabase.from('web_login_codes').select('sent_at').eq('phone', key).maybeSingle()
+  if (last && Date.now() - new Date(last.sent_at).getTime() < 10 * 60_000) return res.status(200).json({ ok: true })
+  await supabase.from('web_login_codes').upsert({ phone: key, code_hash: '-', expires_at: new Date().toISOString(), sent_at: new Date().toISOString() }, { onConflict: 'phone' })
 
   const newPassword = generatePassword()
 

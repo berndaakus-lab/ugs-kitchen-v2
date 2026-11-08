@@ -64,10 +64,8 @@ export default function ProfilePage() {
   }, [authLoading, isLoggedIn])
 
   async function loadOrderCount() {
-    const { count } = await supabase
-      .from('orders')
-      .select('id', { count: 'exact', head: true })
-      .eq('momo_number', customer.phone)
+    const res = await fetch('/api/customer/orders?count=1')
+    const { count } = res.ok ? await res.json() : {}
     setOrderCount(count ?? 0)
   }
 

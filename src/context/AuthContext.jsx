@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
 
+// Customer accounts. Sign-in is checked on the server (/api/customer/*), which
+// keeps the customer signed in with a secure cookie. localStorage only holds a
+// copy of the name/phone so the header can show it before the server answers.
 const AuthContext = createContext(null)
 const SESSION_KEY = 'ugs_customer'
 
@@ -8,190 +10,99 @@ function validatePhone(phone) {
   return /^0[2-5][0-9]{8}$/.test(phone.replace(/\s/g, ''))
 }
 
-function generateUsername(name, phone) {
-  const first = name.trim().split(' ')[0].toLowerCase().replace(/[^a-z]/g, '')
-  return `${first}${phone.slice(-3)}`
-}
-
-function generatePassword() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  return 'UGS-' + Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+async function post(path, body) {
+  try {
+    const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { error: data.message || 'Something went wrong. Please try again.' }
+    return data
+  } catch {
+    return { error: 'No connection. Please try again.' }
+  }
 }
 
 export function AuthProvider({ children }) {
-  const [customer, setCustomer] = useState(null) // { id, name, phone }
+  const [customer, setCustomer] = useState(null) // { id, name, phone, username, contact_phone, avatar_url }
   const [loading,  setLoading]  = useState(true)
 
-  // Restore session from localStorage on mount
+  const remember = useCallback(c => {
+    setCustomer(c)
+    try {
+      if (c) localStorage.setItem(SESSION_KEY, JSON.stringify(c))
+      else localStorage.removeItem(SESSION_KEY)
+    } catch {}
+  }, [])
+
+  // Restore: show the saved copy at once, then confirm with the server.
   useEffect(() => {
     try {
       const saved = localStorage.getItem(SESSION_KEY)
       if (saved) setCustomer(JSON.parse(saved))
     } catch {}
-    setLoading(false)
+    fetch('/api/customer/me')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => remember(d?.customer ?? null))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [remember])
+
+  // ── After a paid order: sign the payer in (creates the account if new) ──
+  // Returns { session, isNew, username, tempPassword } or null.
+  const silentSignIn = useCallback(async order => {
+    if (!order?.id || !order?._token) return null
+    const r = await post('/api/customer/after-payment', { orderId: order.id, token: order._token })
+    if (r.error || !r.customer) return null
+    remember(r.customer)
+    return { session: r.customer, isNew: !!r.isNew, username: r.username, tempPassword: r.tempPassword }
+  }, [remember])
+
+  // ── Sign in / sign up by phone: an SMS code proves the number is yours ──
+  const requestCode = useCallback(async (phone, mode = 'signin', name = '') => {
+    const clean = phone.replace(/\s/g, '')
+    if (!validatePhone(clean)) return { error: 'Enter a valid 10-digit Ghana phone number.' }
+    if (mode === 'signup' && !name.trim()) return { error: 'Please enter your name.' }
+    return post('/api/customer/code', { phone: clean, mode, name: name.trim() })
   }, [])
 
-  // ── Silent sign-in — called automatically on order payment ──
-  // Returns { session, isNew, username, tempPassword } for new customers
-  // Returns { session, isNew: false } for returning customers
-  const silentSignIn = useCallback(async (name, phone) => {
-    const cleanPhone = phone.replace(/\s/g, '')
-    if (!validatePhone(cleanPhone)) return null
-
-    try {
-      // Check if customer already exists
-      const { data: existing } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('phone', cleanPhone)
-        .maybeSingle()
-
-      if (existing) {
-        const session = { id: existing.id, name: existing.name, phone: existing.phone, contact_phone: existing.contact_phone ?? null, avatar_url: existing.avatar_url ?? null }
-        setCustomer(session)
-        localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-        return { session, isNew: false }
-      }
-
-      // New customer — generate credentials
-      const baseUsername  = generateUsername(name, cleanPhone)
-      const tempPassword  = generatePassword()
-
-      // Retry up to 3 times if username is already taken (unique constraint)
-      let data = null
-      let finalUsername = baseUsername
-      for (let attempt = 0; attempt < 3; attempt++) {
-        finalUsername = attempt === 0
-          ? baseUsername
-          : `${baseUsername}${Math.floor(Math.random() * 90) + 10}`
-        const { data: row, error } = await supabase
-          .from('customers')
-          .insert({ name: name.trim(), phone: cleanPhone, username: finalUsername, password: tempPassword })
-          .select()
-          .single()
-        if (!error) { data = row; break }
-        if (!error.message.includes('unique') && !error.message.includes('duplicate')) throw error
-      }
-
-      if (!data) throw new Error('Could not create account')
-
-      const session = { id: data.id, name: data.name, phone: data.phone, contact_phone: data.contact_phone ?? null, avatar_url: null }
-      setCustomer(session)
-      localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-      return { session, isNew: true, username: finalUsername, tempPassword }
-    } catch {
-      return null
-    }
-  }, [])
-
-  // ── Explicit sign in by phone (for returning customers) ──────
-  const signInByPhone = useCallback(async (phone) => {
-    const cleanPhone = phone.replace(/\s/g, '')
-    if (!validatePhone(cleanPhone)) return { error: 'Enter a valid 10-digit Ghana phone number.' }
-
-    const { data } = await supabase
-      .from('customers')
-      .select('*')
-      .eq('phone', cleanPhone)
-      .maybeSingle()
-
-    if (!data) return { error: 'No account found for this number.' }
-
-    const session = { id: data.id, name: data.name, phone: data.phone, contact_phone: data.contact_phone ?? null, avatar_url: data.avatar_url ?? null }
-    setCustomer(session)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-    return { data: session }
-  }, [])
+  const verifyCode = useCallback(async (phone, code) => {
+    if (!/^\d{6}$/.test(String(code).trim())) return { error: 'Enter the 6-digit code from the SMS.' }
+    const r = await post('/api/customer/verify', { phone: phone.replace(/\s/g, ''), code: String(code).trim() })
+    if (r.error) return r
+    remember(r.customer)
+    return { data: r.customer }
+  }, [remember])
 
   // ── Sign in by username + password ────────────────────────────
   const signInByCredentials = useCallback(async (username, password) => {
     if (!username.trim()) return { error: 'Enter your username.' }
     if (!password)        return { error: 'Enter your password.' }
-
-    const { data } = await supabase
-      .from('customers')
-      .select('*')
-      .eq('username', username.trim().toLowerCase())
-      .maybeSingle()
-
-    if (!data)                  return { error: 'Username not found.' }
-    if (data.password !== password) return { error: 'Incorrect password.' }
-
-    const session = { id: data.id, name: data.name, phone: data.phone, contact_phone: data.contact_phone ?? null, avatar_url: data.avatar_url ?? null }
-    setCustomer(session)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-    return { data: session }
-  }, [])
-
-  // ── Explicit sign up ─────────────────────────────────────────
-  const signUp = useCallback(async (name, phone) => {
-    const cleanPhone = phone.replace(/\s/g, '')
-    if (!name.trim())              return { error: 'Please enter your name.' }
-    if (!validatePhone(cleanPhone)) return { error: 'Enter a valid 10-digit Ghana phone number.' }
-
-    // Check if already exists
-    const { data: existing } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('phone', cleanPhone)
-      .maybeSingle()
-
-    if (existing) return { error: 'An account with this number already exists. Please sign in.' }
-
-    const { data, error } = await supabase
-      .from('customers')
-      .insert({ name: name.trim(), phone: cleanPhone })
-      .select()
-      .single()
-
-    if (error) return { error: 'Could not create account. Please try again.' }
-
-    const session = { id: data.id, name: data.name, phone: data.phone }
-    setCustomer(session)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-    return { data: session }
-  }, [])
+    const r = await post('/api/customer/login', { username: username.trim().toLowerCase(), password })
+    if (r.error) return r
+    remember(r.customer)
+    return { data: r.customer }
+  }, [remember])
 
   // ── Update password ───────────────────────────────────────────
-  const updatePassword = useCallback(async (newPassword) => {
-    if (!customer)          return { error: 'Not logged in.' }
+  const updatePassword = useCallback(async newPassword => {
+    if (!customer)            return { error: 'Not logged in.' }
     if (!newPassword?.trim()) return { error: 'Password cannot be empty.' }
-
-    const { error } = await supabase
-      .from('customers')
-      .update({ password: newPassword.trim() })
-      .eq('id', customer.id)
-
-    if (error) return { error: 'Could not update password.' }
+    const r = await post('/api/customer/me', { action: 'password', password: newPassword.trim() })
+    if (r.error) return { error: r.error === 'Not signed in.' ? 'Please sign in again.' : r.error }
     return { data: true }
   }, [customer])
 
   const updateProfile = useCallback(async ({ name, avatar_url, contact_phone }) => {
     if (!customer) return { error: 'Not logged in.' }
-    const updates = {}
-    if (name          !== undefined) updates.name          = name.trim()
-    if (avatar_url    !== undefined) updates.avatar_url    = avatar_url
-    if (contact_phone !== undefined) updates.contact_phone = contact_phone ? contact_phone.replace(/\s/g, '') : null
-
-    const { data, error } = await supabase
-      .from('customers')
-      .update(updates)
-      .eq('id', customer.id)
-      .select()
-      .single()
-
-    if (error) return { error: 'Could not update profile.' }
-
-    const session = { ...customer, name: data.name, contact_phone: data.contact_phone ?? null, avatar_url: data.avatar_url ?? customer.avatar_url }
-    setCustomer(session)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-    return { data: session }
-  }, [customer])
+    const r = await post('/api/customer/me', { action: 'profile', name, avatar_url, contact_phone })
+    if (r.error) return { error: r.error === 'Not signed in.' ? 'Please sign in again.' : r.error }
+    remember(r.customer)
+    return { data: r.customer }
+  }, [customer, remember])
 
   const signOut = useCallback(() => {
-    setCustomer(null)
-    localStorage.removeItem(SESSION_KEY)
-  }, [])
+    remember(null)
+    post('/api/customer/me', { action: 'logout' })
+  }, [remember])
 
   return (
     <AuthContext.Provider value={{
@@ -199,9 +110,9 @@ export function AuthProvider({ children }) {
       loading,
       isLoggedIn: !!customer,
       silentSignIn,
-      signInByPhone,
+      requestCode,
+      verifyCode,
       signInByCredentials,
-      signUp,
       signOut,
       updateProfile,
       updatePassword,

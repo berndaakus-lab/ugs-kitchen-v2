@@ -1,7 +1,9 @@
 // GET /api/test-sms?to=0244XXXXXX
 // DEBUG ONLY — disable in production by checking NEXT_PUBLIC_APP_URL or removing this file
 
-export default async function handler(req, res) {
+import { withStaff } from '../../lib/webSession'
+
+async function handler(req, res) {
   const to      = req.query.to
   const apiKey  = process.env.NKOMO_API_KEY
   const sender  = process.env.NKOMO_SENDER_ID || 'UGsKitchen'
@@ -45,3 +47,6 @@ export default async function handler(req, res) {
 
   return res.status(200).json({ envCheck, request: body, httpStatus: status, response: parsed })
 }
+
+// Signed-in staff only (admin).
+export default withStaff(handler, { roles: ["admin"] })
