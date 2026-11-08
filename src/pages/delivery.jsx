@@ -1,6 +1,6 @@
 import Head from 'next/head'
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { adminDb, staffLogin, staffMe, staffLogout } from '../lib/adminDb'
 import { MapPin, CheckCircle2, RefreshCw, LogOut, Package } from 'lucide-react'
 import { useAdminPush } from '../hooks/usePush'
 
@@ -29,20 +29,10 @@ function LoginScreen({ onLogin }) {
     setError('')
     setLoading(true)
 
-    const u = username.trim().toLowerCase()
-    const { data, error: dbErr } = await supabase
-      .from('staff')
-      .select('id, name, pin, role, is_active, branch_id')
-      .eq('username', u)
-      .single()
-
+    const { user, error: err } = await staffLogin(username.trim().toLowerCase(), pin)
     setLoading(false)
-
-    if (dbErr || !data) { setError('Account not found.'); setPin(''); return }
-    if (!data.is_active) { setError('Account is disabled.'); setPin(''); return }
-    if (data.pin !== pin) { setError('Wrong PIN.'); setPin(''); return }
-
-    onLogin({ id: data.id, role: data.role, name: data.name, branch_id: data.branch_id ?? null })
+    if (err) { setError(err); setPin(''); return }
+    onLogin(user)
   }
 
   return (
@@ -189,6 +179,13 @@ function OrderCard({ order, onDeliver, delivering }) {
 
 export default function DeliveryPage() {
   const [currentUser, setCurrentUser] = useState(null)
+  const [checkingSession, setCheckingSession] = useState(true)
+  useEffect(() => {
+    staffMe().then(u => { if (u) setCurrentUser(u); setCheckingSession(false) })
+    const out = () => setCurrentUser(null)
+    window.addEventListener('ugs-staff-signed-out', out)
+    return () => window.removeEventListener('ugs-staff-signed-out', out)
+  }, [])
   const [orders,      setOrders]      = useState([])
   const [loading,     setLoading]     = useState(true)
   const [refreshing,  setRefreshing]  = useState(false)
@@ -199,7 +196,7 @@ export default function DeliveryPage() {
   const fetchOrders = useCallback(async () => {
     // Always today in GMT — clears at midnight GMT
     const todayGMT = new Date().toISOString().split('T')[0]
-    const { data } = await supabase
+    const { data } = await adminDb
       .from('orders')
       .select('id, customer_name, delivery_location, items, total_amount, notes, status, created_at')
       .in('status', DELIVERY_STATUSES)
@@ -214,13 +211,9 @@ export default function DeliveryPage() {
     if (!currentUser) return
     fetchOrders()
 
-    // Real-time: any order change refreshes the list
-    const channel = supabase
-      .channel('delivery-orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchOrders)
-      .subscribe()
-
-    return () => supabase.removeChannel(channel)
+    // Refresh every 15 s while the page is open.
+    const id = setInterval(() => { if (document.visibilityState === 'visible') fetchOrders() }, 15000)
+    return () => clearInterval(id)
   }, [currentUser, fetchOrders])
 
   async function handleDeliver(orderId) {
@@ -245,7 +238,7 @@ export default function DeliveryPage() {
     setRefreshing(false)
   }
 
-  if (!currentUser) return <LoginScreen onLogin={setCurrentUser} />
+  if (!currentUser) return checkingSession ? null : <LoginScreen onLogin={setCurrentUser} />
 
   // Filter out pick-up orders — delivery guy doesn't need those
   const deliveryOrders = orders.filter(o => !o.delivery_location?.toLowerCase().includes('pick'))
@@ -273,7 +266,7 @@ export default function DeliveryPage() {
               <RefreshCw size={16} className={`text-gray-500 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
-              onClick={() => setCurrentUser(null)}
+              onClick={() => { staffLogout(); setCurrentUser(null) }}
               className="w-9 h-9 rounded-xl bg-brand-cream flex items-center justify-center active:bg-gray-200"
             >
               <LogOut size={16} className="text-gray-500" />

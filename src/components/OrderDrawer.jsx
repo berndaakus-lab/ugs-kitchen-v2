@@ -38,6 +38,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
   const [gpsLoading, setGpsLoading] = useState(false)
   const [gpsLink, setGpsLink]     = useState(null) // Google Maps URL when captured
   const drawerRef                 = useRef(null)
+  const orderTokens               = useRef({})   // orderId → token from /api/create-order
 
   // Auto-fill name from logged-in session when drawer opens
   // MoMo number is intentionally left blank — customer may use a different number
@@ -102,32 +103,25 @@ export default function OrderDrawer({ onPaymentSuccess }) {
 
     setLoading(true)
     try {
-      // 1. Persist order to Supabase
-      // Use logged-in account phone for SMS (may differ from MoMo used to pay)
-      // Falls back to MoMo number if guest
-      const contactPhone = customer?.phone ?? phone
-
-      // Use the longest prep time across all cart items as the order wait time
-      const waitMins = Math.max(...items.map(i => i.wait_time_minutes ?? 30))
-
-      const { data: order, error: dbErr } = await supabase
-        .from('orders')
-        .insert({
-          customer_name:      name.trim(),
-          delivery_location:  gpsLink ? `${location}\n${gpsLink}` : location,
-          momo_number:        phone,
-          contact_phone:      contactPhone,
-          items:              items,
-          total_amount:       totalAmount,
-          status:             'pending',
-          branch_id:          currentBranch?.id ?? null,
-          notes:              notes.trim() || null,
-          wait_time_minutes:  waitMins,
-        })
-        .select()
-        .single()
-
-      if (dbErr) throw new Error(dbErr.message)
+      // 1. Create the order on the server. It takes prices from the menu and
+      // returns a token that lets this browser pay for the order and see it.
+      const created = await fetch('/api/create-order', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          branch_id:     currentBranch?.id ?? null,
+          items:         items.map(i => ({ id: i.id, quantity: i.quantity })),
+          customer_name: name.trim(),
+          location,
+          gps_link:      gpsLink,
+          momo_number:   phone,
+          notes:         notes.trim(),
+        }),
+      })
+      const createdBody = await created.json().catch(() => ({}))
+      if (!created.ok) throw new Error(createdBody.message || 'Could not place your order. Please try again.')
+      const { order, token } = createdBody
+      orderTokens.current[order.id] = token
 
       // 2. Trigger Paystack MoMo charge via our API route
       const res = await fetch('/api/initiate-payment', {
@@ -136,8 +130,7 @@ export default function OrderDrawer({ onPaymentSuccess }) {
         body:    JSON.stringify({
           orderId:     order.id,
           phone,
-          amount:      totalAmount,
-          customerName: name.trim(),
+          token,
         }),
       })
 
@@ -171,10 +164,9 @@ export default function OrderDrawer({ onPaymentSuccess }) {
     async function handleSuccess(orderData) {
       if (resolved) return
       resolved = true
-      channel.unsubscribe()
       clearTimeout(timeoutId)
       setLoading(false)
-      const accountInfo = await silentSignIn(orderData.customer_name, orderData.momo_number)
+      const accountInfo = await silentSignIn(orderData)
       clearCart()
       closeDrawer()
       onPaymentSuccess({ ...orderData, _newAccount: accountInfo })
@@ -183,7 +175,6 @@ export default function OrderDrawer({ onPaymentSuccess }) {
     function handleFailed(reason) {
       if (resolved) return
       resolved = true
-      channel.unsubscribe()
       clearTimeout(timeoutId)
       setLoading(false)
       const r = (reason ?? '').toLowerCase()
@@ -202,35 +193,24 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       setToastError(msg)
     }
 
-    // Layer 1 — Supabase Realtime (fires instantly when webhook updates the DB)
-    const channel = supabase
-      .channel(`order-${orderId}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-        payload => {
-          const status = payload.new.status
-          if (status === 'paid')   handleSuccess(payload.new)
-          // Inside the 2-minute approval window, let the regular check decide.
-          if (status === 'failed' && waited() >= MIN_APPROVAL_SECONDS) handleFailed(payload.new.payment_failure_reason)
-        }
-      )
-      .subscribe()
+    // (The database is no longer readable from the browser, so there is no
+    // Realtime push here: the Paystack checks below decide.)
 
     // Paystack wants a one-time code before it sends the prompt: stop waiting
     // and show the code box (submitting it restarts this check).
     function handleNeedsOtp() {
       if (resolved) return
       resolved = true
-      channel.unsubscribe()
       clearTimeout(timeoutId)
       setLoading(false)
       setOtpState({ reference, orderId })
     }
 
     async function loadPaidOrder() {
-      const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single()
-      handleSuccess(order)
+      const token = orderTokens.current[orderId]
+      const res = await fetch(`/api/order?id=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}`)
+      const { order } = await res.json().catch(() => ({}))
+      handleSuccess({ ...(order || { id: orderId }), _token: token })
     }
 
     // Layer 2 — Direct Paystack verify polling (fast at first, then slower)
@@ -278,7 +258,6 @@ export default function OrderDrawer({ onPaymentSuccess }) {
       } catch { /* fall through to the message below */ }
       if (resolved) return
       resolved = true
-      channel.unsubscribe()
       setLoading(false)
       setToastError(
         "We haven't received your payment confirmation yet. If you approved it on your phone, " +

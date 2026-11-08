@@ -50,7 +50,7 @@ export default function PayStatus({ order, onDismiss }) {
   const [done,         setDone]         = useState(false)
   const [knownWaitMin, setKnownWaitMin] = useState(order?.wait_time_minutes ?? 30)
 
-  useCustomerPush(order?.id)
+  useCustomerPush(order?.id, order?._token)
 
   const newAccount = order?._newAccount?.isNew ? order._newAccount : null
 

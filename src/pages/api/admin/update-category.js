@@ -3,13 +3,14 @@
 // Service role required — categories have no write RLS.
 
 import { createClient } from '@supabase/supabase-js'
+import { withStaff } from '../../../lib/webSession'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
   const { categoryId, image, name, description } = req.body ?? {}
@@ -35,3 +36,6 @@ export default async function handler(req, res) {
 
   return res.status(200).json({ ok: true })
 }
+
+// Signed-in staff only (admin).
+export default withStaff(handler, { roles: ["admin"] })

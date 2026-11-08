@@ -2,7 +2,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx'
-import { supabase } from '../lib/supabase'
+import { adminDb, staffLogin, staffMe, staffLogout } from '../lib/adminDb'
 import { useAdminPush } from '../hooks/usePush'
 import {
   ShoppingBag, Clock, XCircle,
@@ -93,49 +93,11 @@ function LoginScreen({ onLogin }) {
     setError('')
     setLoading(true)
 
-    const u = username.trim().toLowerCase()
-    const adminUser = (process.env.NEXT_PUBLIC_ADMIN_USERNAME || 'admin').toLowerCase()
-
-    // ── Admin: match env credentials
-    if (u === adminUser) {
-      if (pin === process.env.NEXT_PUBLIC_ADMIN_PIN) {
-        onLogin({ role: 'admin', name: 'Admin' })
-      } else {
-        setError('Wrong PIN. Try again.')
-        setPin('')
-      }
-      setLoading(false)
-      return
-    }
-
-    // ── Kitchen staff: look up in DB
-    const { data, error: dbErr } = await supabase
-      .from('staff')
-      .select('id, name, pin, role, is_active, branch_id')
-      .eq('username', u)
-      .single()
-
-    if (dbErr || !data) {
-      setError('Account not found.')
-      setLoading(false)
-      setPin('')
-      return
-    }
-    if (!data.is_active) {
-      setError('Account is disabled. Contact admin.')
-      setLoading(false)
-      setPin('')
-      return
-    }
-    if (data.pin !== pin) {
-      setError('Wrong PIN. Try again.')
-      setLoading(false)
-      setPin('')
-      return
-    }
-
-    onLogin({ role: data.role, name: data.name, branch_id: data.branch_id ?? null })
+    // Checked on the server, which then sets a signed login cookie.
+    const { user, error: err } = await staffLogin(username.trim().toLowerCase(), pin)
     setLoading(false)
+    if (err) { setError(err); setPin(''); return }
+    onLogin(user)
   }
 
   return (
@@ -803,7 +765,15 @@ function StaffFormModal({ item, branches, onSave, onClose, saving }) {
 
 // ── Main Admin Dashboard ──────────────────────────────────────
 export default function AdminPage() {
-  const [currentUser,    setCurrentUser]    = useState(null)   // { role, name }
+  const [currentUser,    setCurrentUser]    = useState(null)   // { id, role, name, branch_id }
+  const [checkingSession, setCheckingSession] = useState(true)
+  // Stay signed in across reloads (signed cookie); drop out if the server says so.
+  useEffect(() => {
+    staffMe().then(u => { if (u) setCurrentUser(u); setCheckingSession(false) })
+    const out = () => setCurrentUser(null)
+    window.addEventListener('ugs-staff-signed-out', out)
+    return () => window.removeEventListener('ugs-staff-signed-out', out)
+  }, [])
   // Subscribe for push after login — works for both admin and staff roles
   useAdminPush(!!currentUser)
   const [activeTab,      setActiveTab]      = useState('orders')
@@ -877,7 +847,7 @@ export default function AdminPage() {
     const branchLabel = branches.find(b => b.id === (currentUser?.branch_id || branchFilter))?.name ?? ''
 
     async function fetchRange(start, end) {
-      let query = supabase
+      let query = adminDb
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
@@ -924,7 +894,7 @@ export default function AdminPage() {
   // Load branches once on login
   useEffect(() => {
     if (!currentUser) return
-    supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, sms_recipients, business_hours, is_active, sort_order').order('sort_order')
+    adminDb.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, sms_recipients, business_hours, is_active, sort_order').order('sort_order')
       .then(({ data }) => setBranches(data ?? []))
   }, [currentUser])
 
@@ -941,7 +911,7 @@ export default function AdminPage() {
     const start = `${date}T00:00:00Z`
     const end   = `${date}T23:59:59Z`
 
-    let query = supabase
+    let query = adminDb
       .from('orders')
       .select('*')
       .gte('created_at', start)
@@ -965,7 +935,7 @@ export default function AdminPage() {
 
   const fetchMenuItems = useCallback(async () => {
     setMenuLoading(true)
-    let query = supabase
+    let query = adminDb
       .from('menu_items')
       .select('id, name, description, price, image, is_available, is_popular, sort_order, branch_id, category_id, categories(name)', { count: 'exact' })
       .order('sort_order')
@@ -979,14 +949,14 @@ export default function AdminPage() {
   }, [menuPage, menuBranch, menuSearch])
 
   const fetchCategories = useCallback(async () => {
-    let query = supabase.from('categories').select('id, name, description, branch_id, image, sort_order').order('sort_order')
+    let query = adminDb.from('categories').select('id, name, description, branch_id, image, sort_order').order('sort_order')
     if (menuBranch !== 'all') query = query.eq('branch_id', menuBranch)
     const { data } = await query
     setCategories(data ?? [])
   }, [menuBranch])
 
   const fetchReviews = useCallback(async () => {
-    const { data } = await supabase
+    const { data } = await adminDb
       .from('reviews')
       .select('id, customer_name, rating, comment, is_approved, created_at')
       .order('created_at', { ascending: false })
@@ -1002,31 +972,32 @@ export default function AdminPage() {
     if (currentUser && activeTab === 'menu') { fetchMenuItems(); fetchCategories() }
   }, [currentUser, activeTab, fetchMenuItems, fetchCategories])
 
-  // Realtime — new orders and reviews appear instantly
+  // New orders and reviews appear on their own: refresh every 15 s while the
+  // page is open (the database is no longer readable from the browser, so
+  // Supabase Realtime can't push changes here).
   useEffect(() => {
     if (!currentUser) return
-    const channel = supabase
-      .channel('admin-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchOrders)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, fetchReviews)
-      .subscribe()
-    return () => channel.unsubscribe()
+    const id = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      fetchOrders(); fetchReviews()
+    }, 15000)
+    return () => clearInterval(id)
   }, [currentUser, fetchOrders, fetchReviews])
 
   async function handleApproveReview(id, current) {
-    await supabase.from('reviews').update({ is_approved: !current }).eq('id', id)
+    await adminDb.from('reviews').update({ is_approved: !current }).eq('id', id)
     fetchReviews()
   }
 
   async function handleDeleteReview(id) {
     if (!confirm('Delete this review permanently?')) return
-    await supabase.from('reviews').delete().eq('id', id)
+    await adminDb.from('reviews').delete().eq('id', id)
     fetchReviews()
   }
 
   const fetchPromos = useCallback(async () => {
     setPromosLoading(true)
-    const { data } = await supabase.from('promos').select('*').order('created_at', { ascending: false })
+    const { data } = await adminDb.from('promos').select('*').order('created_at', { ascending: false })
     setPromos(data ?? [])
     setPromosLoading(false)
   }, [])
@@ -1036,13 +1007,13 @@ export default function AdminPage() {
   }, [currentUser, activeTab, isAdmin, fetchPromos])
 
   async function handlePromoToggle(id, current) {
-    await supabase.from('promos').update({ active: !current }).eq('id', id)
+    await adminDb.from('promos').update({ active: !current }).eq('id', id)
     fetchPromos()
   }
 
   async function handlePromoDelete(id) {
     if (!confirm('Delete this promo permanently?')) return
-    await supabase.from('promos').delete().eq('id', id)
+    await adminDb.from('promos').delete().eq('id', id)
     fetchPromos()
   }
 
@@ -1058,8 +1029,8 @@ export default function AdminPage() {
       ends_at:  promoForm.ends_at || null,
     }
     const { error } = promoForm.id
-      ? await supabase.from('promos').update(payload).eq('id', promoForm.id)
-      : await supabase.from('promos').insert(payload)
+      ? await adminDb.from('promos').update(payload).eq('id', promoForm.id)
+      : await adminDb.from('promos').insert(payload)
     setPromoSaving(false)
     if (error) { setPromoError(error.message); return }
     setPromoForm(null)
@@ -1100,26 +1071,26 @@ export default function AdminPage() {
       sort_order:         parseInt(branchForm.sort_order) || 0,
     }
     const { error } = branchForm.id
-      ? await supabase.from('branches').update(payload).eq('id', branchForm.id)
-      : await supabase.from('branches').insert(payload)
+      ? await adminDb.from('branches').update(payload).eq('id', branchForm.id)
+      : await adminDb.from('branches').insert(payload)
     setBranchSaving(false)
     if (error) { setBranchError(error.message); return }
     setBranchForm(null)
     setNewLocation('')
     setNewSmsPhone('')
-    const { data } = await supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, sms_recipients, business_hours, is_active, sort_order').order('sort_order')
+    const { data } = await adminDb.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, sms_recipients, business_hours, is_active, sort_order').order('sort_order')
     setBranches(data ?? [])
   }
 
   async function handleBranchToggle(id, current) {
-    await supabase.from('branches').update({ is_active: !current }).eq('id', id)
-    const { data } = await supabase.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, sms_recipients, business_hours, is_active, sort_order').order('sort_order')
+    await adminDb.from('branches').update({ is_active: !current }).eq('id', id)
+    const { data } = await adminDb.from('branches').select('id, name, slug, address, phone, whatsapp, delivery_locations, sms_recipients, business_hours, is_active, sort_order').order('sort_order')
     setBranches(data ?? [])
   }
 
   async function handleBranchDelete(id) {
     if (!confirm('Delete this branch? This cannot be undone.')) return
-    await supabase.from('branches').delete().eq('id', id)
+    await adminDb.from('branches').delete().eq('id', id)
     setBranches(prev => prev.filter(b => b.id !== id))
   }
 
@@ -1138,9 +1109,9 @@ export default function AdminPage() {
       wait_time_minutes: parseInt(formData.wait_time_minutes) || 30,
     }
     if (formData.id) {
-      await supabase.from('menu_items').update(payload).eq('id', formData.id)
+      await adminDb.from('menu_items').update(payload).eq('id', formData.id)
     } else {
-      await supabase.from('menu_items').insert(payload)
+      await adminDb.from('menu_items').insert(payload)
     }
     setFormSaving(false)
     setMenuForm(null)
@@ -1149,12 +1120,12 @@ export default function AdminPage() {
 
   async function handleMenuDelete(id) {
     if (!confirm('Delete this menu item? This cannot be undone.')) return
-    await supabase.from('menu_items').delete().eq('id', id)
+    await adminDb.from('menu_items').delete().eq('id', id)
     fetchMenuItems()
   }
 
   async function handleMenuToggle(item, field) {
-    await supabase.from('menu_items').update({ [field]: !item[field] }).eq('id', item.id)
+    await adminDb.from('menu_items').update({ [field]: !item[field] }).eq('id', item.id)
     fetchMenuItems()
   }
 
@@ -1162,7 +1133,7 @@ export default function AdminPage() {
   const fetchStaff = useCallback(async () => {
     setStaffLoading(true)
     setStaffError('')
-    const { data, error: err } = await supabase
+    const { data, error: err } = await adminDb
       .from('staff')
       .select('id, name, username, role, is_active, branch_id, created_at, branches(name)')
       .order('created_at', { ascending: false })
@@ -1191,10 +1162,10 @@ export default function AdminPage() {
     }
     if (form.id) {
       if (!form.pin) delete payload.pin   // keep existing PIN if blank on edit
-      const { error: err } = await supabase.from('staff').update(payload).eq('id', form.id)
+      const { error: err } = await adminDb.from('staff').update(payload).eq('id', form.id)
       if (err) { setStaffError(err.message); setStaffSaving(false); return }
     } else {
-      const { error: err } = await supabase.from('staff').insert(payload)
+      const { error: err } = await adminDb.from('staff').insert(payload)
       if (err) { setStaffError(err.message); setStaffSaving(false); return }
     }
     setStaffSaving(false)
@@ -1204,12 +1175,12 @@ export default function AdminPage() {
 
   async function handleStaffDelete(id) {
     if (!confirm('Remove this staff account permanently?')) return
-    await supabase.from('staff').delete().eq('id', id)
+    await adminDb.from('staff').delete().eq('id', id)
     fetchStaff()
   }
 
   async function handleStaffToggle(member) {
-    await supabase.from('staff').update({ is_active: !member.is_active }).eq('id', member.id)
+    await adminDb.from('staff').update({ is_active: !member.is_active }).eq('id', member.id)
     fetchStaff()
   }
 
@@ -1249,7 +1220,7 @@ export default function AdminPage() {
     fetchOrders()
   }
 
-  if (!currentUser) return <LoginScreen onLogin={user => setCurrentUser(user)} />
+  if (!currentUser) return checkingSession ? null : <LoginScreen onLogin={user => setCurrentUser(user)} />
 
   const filtered = statusFilter === 'all'
     ? orders
@@ -1285,7 +1256,7 @@ export default function AdminPage() {
                 <RefreshCw size={16} className="text-brand-dark" />
               </button>
               <button
-                onClick={() => setCurrentUser(null)}
+                onClick={() => { staffLogout(); setCurrentUser(null) }}
                 className="w-9 h-9 rounded-xl bg-brand-muted flex items-center justify-center"
               >
                 <LogOut size={16} className="text-brand-dark" />

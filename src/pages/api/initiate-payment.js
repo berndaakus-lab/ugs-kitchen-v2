@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { toPaystackAmount, detectNetwork } from '../../api/paystack'
 import { markPaymentFailed } from '../../lib/paymentStatus'
 import { isOpen, openHoursToday } from '../../lib/businessHours'
+import { checkOrderToken } from '../../lib/webSession'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -18,9 +19,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: 'Method not allowed' })
   }
 
-  const { orderId, phone, amount, customerName } = req.body
+  const { orderId, phone, token } = req.body
 
-  if (!orderId || !phone || !amount || !customerName) {
+  // Only the browser that placed the order (it holds the order's token) can start its payment.
+  if (!checkOrderToken(orderId, token)) return res.status(403).json({ message: 'Please place the order again.' })
+  if (!orderId || !phone) {
     return res.status(400).json({ message: 'Missing required fields.' })
   }
 
@@ -31,7 +34,12 @@ export default async function handler(req, res) {
 
   // Working hours are enforced here too, not just by greying out the menu:
   // a cart filled before closing time can't be paid for after it.
-  const { data: orderRow } = await supabase.from('orders').select('branch_id, items').eq('id', orderId).maybeSingle()
+  const { data: orderRow } = await supabase.from('orders').select('branch_id, items, total_amount, customer_name, status').eq('id', orderId).maybeSingle()
+  if (!orderRow) return res.status(404).json({ message: 'Order not found. Please place it again.' })
+  if (orderRow.status !== 'pending') return res.status(409).json({ message: 'This order has already been sent for payment. Please place it again.' })
+  // The amount charged is the order's total from the database, never a number from the browser.
+  const amount = Number(orderRow.total_amount)
+  const customerName = orderRow.customer_name
 
   // Branch stock (POS Module 2): don't charge for food the branch no longer has.
   // If stock isn't set up yet the check returns an error and we carry on as before.
