@@ -35,7 +35,7 @@ export default function VoidModal({ sale, onClose, onVoided }) {
         <input className="input" placeholder="Reason" value={reason} onChange={e => setReason(e.target.value)} autoFocus />
         <input
           className="input tracking-[0.4em]"
-          placeholder="Manager PIN"
+          placeholder="Approver PIN (manager)"
           type="password"
           inputMode="numeric"
           value={pin}

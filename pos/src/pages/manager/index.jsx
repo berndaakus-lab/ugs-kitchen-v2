@@ -4,7 +4,7 @@ import Layout, { ErrorText, Stat, StatusBadge } from '@/components/Layout'
 import VoidModal from '@/components/VoidModal'
 import { api, ghs, time, METHOD_LABEL, shownMethods, useBranchEvents, useMe } from '@/lib/client'
 
-const ROLES = ['manager']
+const ROLES = ['reports']   // permissions that open this page
 const todayStr = () => new Date().toISOString().slice(0, 10)
 const CHANNELS = [['all', 'All sales'], ['walk_in', 'Walk-in'], ['online', 'Online']]
 
@@ -44,7 +44,7 @@ export default function Manager() {
       <div className="mx-auto max-w-5xl space-y-4 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-black">Sales overview</h1>
-          {me?.user.role === 'admin' && (
+          {me?.user.scopeAll && (
             <div className="flex gap-1">
               {[['branch', me.user.branch_name], ['all', 'All branches']].map(([k, label]) => (
                 <button

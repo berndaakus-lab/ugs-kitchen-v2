@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Download, Search } from 'lucide-react'
 import Layout, { ErrorText, Stat } from '@/components/Layout'
-import { api, ghs, dateTime, useMe } from '@/lib/client'
+import { api, can, ghs, dateTime, useMe } from '@/lib/client'
 
-const ROLES = ['manager']
+const ROLES = ['customers']   // permissions that open this page
 
 // Walk-in customers captured at the till. Only those who agreed (opted in)
 // may receive promo SMS; the export contains only them.
@@ -57,9 +57,9 @@ export default function Customers() {
       <div className="mx-auto max-w-4xl space-y-4 p-3 md:p-4">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-black">Customers</h1>
-          <button className="btn-ghost ml-auto px-3 py-2 text-sm" onClick={exportOptedIn}>
+          {can(me?.user, 'export') && <button className="btn-ghost ml-auto px-3 py-2 text-sm" onClick={exportOptedIn}>
             <Download size={16} /> Export promo list (CSV)
-          </button>
+          </button>}
         </div>
         <p className="text-sm text-gray-600">
           Walk-in customers who gave their number at the till. Only customers who agreed to offers may be sent promo SMS.

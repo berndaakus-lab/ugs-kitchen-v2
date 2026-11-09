@@ -15,7 +15,7 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
    - Servers see a report of what they served, to check against the tickets they collected.
 4. **Manager** (`/manager`):
    - Sales for the day: walk-in and **online** combined, with totals by payment method and per-staff breakdowns.
-   - Voids: always need a manager PIN, only before any food is served, and are logged.
+   - Voids: always need the PIN of someone whose role may **approve voids** at that branch (Branch manager, Admin), only before any food is served, and are logged.
    - POS staff logins (`/manager/staff`). A person can have **more than one role**: tick both Cashier and Server for someone who does both. They then see Sell and Serve, and both reports on My shift. Manager and Admin already cover every screen, so they stand alone.
 
 ## Walk-in customers and reviews
@@ -24,6 +24,29 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
 - **Name:** never asked. It comes from a previous visit, or from the name registered on the MoMo wallet, looked up through Paystack.
 - **Promo consent:** a separate tick box, off by default. The consent date is stored. **Customers** (manager/admin) exports only customers who agreed, as a CSV file.
 - **Review SMS:** as soon as a sale is paid (cash, or MoMo once confirmed), the customer gets one thank-you SMS. It has a review link to `/review` on this app, valid for 24 hours. Reviews are saved in the same `reviews` table as online reviews.
+
+## Roles & permissions
+
+One login per person (username + PIN) for the POS **and** the website's staff pages (`/admin`, `/delivery`).
+
+- **Roles are built by the owner** in **Roles** (`/manager/roles`). Each role has:
+  - permissions, ticked from a fixed list grouped as Selling, Online orders, Stock, Reports, People & data and Website
+  - where it works: one branch, all branches + the kitchen, or the kitchen
+  - whether it **runs on shift**
+  - which roles its holders may give to other people
+- **Admin** is locked: it has every permission, everywhere.
+- **Starting roles** (all editable): General manager, Branch manager, Kitchen head, Cashier, Server, Online orders, Delivery.
+- **A person can hold any combination of roles.** They get everything any of those roles allows, and the widest place of work.
+- **Changes apply straight away.** Every request re-reads the person's roles, so a role edit or a disabled login takes effect at once.
+- **Staff** (`/manager/staff`) is where you add a person, tick their roles and set their PIN.
+  - You can only give the roles your own roles allow.
+  - You can only change people whose roles are all ones you could give.
+  - Branch-level people see their branch only.
+- **Shifts:**
+  - Someone who sells runs a **cash shift** (float in, count out, Z-report).
+  - Anyone else whose role runs on shift has a **duty shift**: start and end on My shift. The printable summary covers food sent, received and served, counts, and voids approved.
+  - While a shift-runner is off shift, the POS shows a banner. Selling, serving, sending, receiving and counting are refused until the shift is started.
+- **Website:** each `/admin` tab appears only for the matching permission (Menu, Promos, Reviews, Branches, Download data). Orders are limited to the person's branch unless they work across branches, and to today unless they have Reports. The owner's `ADMIN_PIN` login still works as a back-up.
 
 ## Central kitchen & branch stock (Module 2)
 
@@ -61,6 +84,7 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
       - Failed or cancelled MoMo attempts are deleted, with a `momo_not_paid` line kept in `pos_audit_log` (it holds the Paystack reference).
    7. `../migrations/pos_007_branch_stock.sql`: Module 2, central kitchen and branch stock (see below). It adds a trigger on the online `orders` table so paid orders take stock off. No columns are changed.
    8. `../migrations/pos_008_stock_units.sql`: adds the **scoop** and **can** units (rice by the scoop, corned beef by the tenth of a can).
+   9. `../migrations/pos_009_roles.sql` (after `web_001_lockdown.sql`): roles & permissions and duty shifts. **Run it before deploying the matching code.** The old code keeps working on it; the new code needs it.
 
    If you ever re-run an earlier migration, re-run the later ones after it, in order.
 

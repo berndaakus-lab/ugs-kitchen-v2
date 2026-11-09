@@ -76,4 +76,4 @@ export default withAuth(async (req, res) => {
     requiresOtp: charge?.status === 'send_otp',
     message:     charge?.display_text || 'Waiting for the customer to approve…',
   })
-}, { roles: ['cashier'] })
+}, { perms: ['sell'] })

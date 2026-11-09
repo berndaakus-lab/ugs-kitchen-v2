@@ -17,4 +17,4 @@ export default withAuth(async (req, res) => {
     meta:     { order_id: order.id, order_no: order.order_no },
   })
   return res.status(200).json({ order, printed_by: req.user.name })
-}, { roles: ['server', 'cashier'] })
+}, { perms: ['online_orders'] })

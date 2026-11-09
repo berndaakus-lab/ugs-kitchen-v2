@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { PackageCheck, Settings } from 'lucide-react'
 import Layout, { ErrorText, Modal } from '@/components/Layout'
-import { api, dateTime, time, isElevated, useBranchEvents, useMe } from '@/lib/client'
+import { api, can, dateTime, time, useBranchEvents, useMe } from '@/lib/client'
 
-const ROLES = ['cashier', 'server']
+const ROLES = ['stock_receive', 'stock_count', 'stock_adjust', 'stock_setup', 'activity']   // permissions that open this page
 const fmt = n => (Number.isInteger(Number(n)) ? Number(n) : Number(n).toFixed(1))
 const BADGE = {
   out: 'bg-red-100 text-red-700',
@@ -24,7 +24,8 @@ export default function Stock() {
   const [adjusting, setAdjusting] = useState(null)
   const [history, setHistory] = useState(false)
   const [error, setError] = useState('')
-  const manager = isElevated(me?.user.role)
+  const u = me?.user
+  const may = { setup: can(u, 'stock_setup'), adjust: can(u, 'stock_adjust'), history: can(u, 'activity'), receive: can(u, 'stock_receive'), count: can(u, 'stock_count') }
 
   const load = useCallback(async () => {
     try {
@@ -44,7 +45,7 @@ export default function Stock() {
       <div className="mx-auto max-w-4xl space-y-4 p-3 md:p-4">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-black">Stock · {me?.user.branch_name}</h1>
-          {manager && (
+          {may.setup && (
             <Link href="/manager/stock" className="btn-ghost ml-auto px-3 py-2 text-sm"><Settings size={16} /> Setup</Link>
           )}
         </div>
@@ -61,7 +62,7 @@ export default function Stock() {
                   <div className="text-gray-600">{d.lines.map(l => `${fmt(l.qty_sent)} ${l.name}`).join(', ')}</div>
                   {d.note && <div className="text-xs text-gray-500">Note: {d.note}</div>}
                 </div>
-                <button className="btn-primary px-4 py-2" onClick={() => setReceiving(d)}><PackageCheck size={18} /> Confirm</button>
+                <button className="btn-primary px-4 py-2" disabled={!may.receive} title={may.receive ? undefined : 'Your role cannot confirm deliveries'} onClick={() => setReceiving(d)}><PackageCheck size={18} /> Confirm</button>
               </div>
             ))}
           </div>
@@ -71,11 +72,11 @@ export default function Stock() {
         <div className="card">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-black">Stock now</h2>
-            <button className="btn-dark ml-auto px-3 py-2 text-sm" onClick={() => setCounting(true)} disabled={!items?.length}>Closing count</button>
-            {manager && <button className="btn-ghost px-3 py-2 text-sm" onClick={() => setHistory(true)}>History</button>}
+            {may.count && <button className="btn-dark ml-auto px-3 py-2 text-sm" onClick={() => setCounting(true)} disabled={!items?.length}>Closing count</button>}
+            {may.history && <button className="btn-ghost px-3 py-2 text-sm" onClick={() => setHistory(true)}>History</button>}
           </div>
           {!items ? <div className="text-gray-400">Loading…</div> : !items.length ? (
-            <p className="text-sm text-gray-500">Nothing is tracked yet.{manager ? ' Set it up under Setup.' : ' Ask a manager to set it up.'}</p>
+            <p className="text-sm text-gray-500">Nothing is tracked yet.{may.setup ? ' Set it up under Setup.' : ' Ask a manager to set it up.'}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -92,7 +93,7 @@ export default function Stock() {
                       <td className="p-2 text-right">{fmt(i.today.adjusted)}</td>
                       <td className="p-2 text-right">
                         <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${BADGE[i.status]}`}>{BADGE_LABEL[i.status]}</span>
-                        {manager && <button className="ml-2 text-xs font-semibold text-brand-brown" onClick={() => setAdjusting(i)}>Adjust</button>}
+                        {may.adjust && <button className="ml-2 text-xs font-semibold text-brand-brown" onClick={() => setAdjusting(i)}>Adjust</button>}
                       </td>
                     </tr>
                   ))}

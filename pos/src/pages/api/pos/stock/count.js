@@ -30,4 +30,4 @@ export default withAuth(async (req, res) => {
       expected: Number(l.expected), counted: Number(l.counted), variance: Number(l.variance),
     })),
   })
-}, { roles: ['cashier', 'server'] })
+}, { perms: ['stock_count'], shift: true })

@@ -6,7 +6,7 @@ export default function Home() {
   const router = useRouter()
   useEffect(() => {
     api('auth/me')
-      .then(({ user }) => router.replace(homeFor(user.role)))
+      .then(({ user, shift }) => router.replace(homeFor(user, shift)))
       .catch(() => router.replace('/login'))
   }, [router])
   return <div className="p-8 text-center text-gray-400">Loading…</div>

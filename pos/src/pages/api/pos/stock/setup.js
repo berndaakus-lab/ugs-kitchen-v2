@@ -63,7 +63,7 @@ export default withAuth(async (req, res) => {
 
     // The admin can apply the same recipe to the dish of the same name at every branch.
     let targets = [dish.id]
-    if (req.body.all_branches && req.user.role === 'admin') {
+    if (req.body.all_branches && req.user.scopeAll) {
       const { data: all, error } = await db.from('menu_items').select('id, name')
       if (error) throw error
       const key = dish.name.trim().toLowerCase()
@@ -86,4 +86,4 @@ export default withAuth(async (req, res) => {
   }
 
   return res.status(400).json({ message: 'Unknown action.' })
-}, { roles: ['manager'] })
+}, { perms: ['stock_setup'] })

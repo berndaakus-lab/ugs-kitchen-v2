@@ -62,4 +62,4 @@ export default withAuth(async (req, res) => {
     await rpc('pos_discard_pending', { p_sale: sale.id, p_actor: req.user.sid, p_reason: `charge failed: ${paystackError(err)}` })
     return res.status(502).json({ message: paystackError(err), status: 'failed' })
   }
-}, { roles: ['cashier'] })
+}, { perms: ['sell'], shift: true })

@@ -21,4 +21,4 @@ export default withAuth(async (req, res) => {
   if (e1 || e2) throw e1 || e2
 
   return res.status(200).json({ categories, items, business_hours: branch?.business_hours || null, stock })
-}, { roles: ['cashier'] })
+}, { perms: ['sell'] })

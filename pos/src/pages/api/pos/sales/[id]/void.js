@@ -2,7 +2,8 @@ import { rpc, loadSale } from '@/lib/supabaseAdmin'
 import { withAuth } from '@/lib/session'
 import { broadcast } from '@/lib/broadcast'
 
-// POST { manager_pin, reason } — always needs a manager's PIN, even when a
+// POST { manager_pin, reason } — always needs the PIN of someone whose role may
+// approve voids at this branch ("Approve voids"), even when a
 // manager is logged in, so every void has a deliberate approval.
 export default withAuth(async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
@@ -14,7 +15,7 @@ export default withAuth(async (req, res) => {
     p_branch: req.user.branch_id,
     p_pin:    String(manager_pin || ''),
   })
-  if (!managerId) return res.status(403).json({ message: 'Manager PIN is incorrect.' })
+  if (!managerId) return res.status(403).json({ message: 'That PIN cannot approve voids here.' })
 
   await rpc('pos_void', {
     p_sale:         req.query.id,
@@ -27,4 +28,4 @@ export default withAuth(async (req, res) => {
   const sale = await loadSale(req.query.id)
   await broadcast(req.user.branch_id, 'sale_voided', { id: sale.id, ticket_no: sale.ticket_no })
   return res.status(200).json({ sale })
-}, { roles: ['cashier'] })
+}, { perms: ['sell'] })

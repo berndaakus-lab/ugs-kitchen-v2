@@ -9,7 +9,7 @@ import { usePrinter } from '@/components/Print'
 import { api, ghs, time, uuid, useBranchEvents, useMe } from '@/lib/client'
 import { isOpen, openHoursToday } from '@/lib/businessHours'
 
-const ROLES = ['cashier']
+const ROLES = ['sell']   // permissions that open this page
 
 export default function Cashier() {
   const [me, reloadMe] = useMe(ROLES)

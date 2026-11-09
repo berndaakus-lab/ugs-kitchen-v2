@@ -1,5 +1,5 @@
 import { db, rpc, loadSale, staffNames, today } from '@/lib/supabaseAdmin'
-import { withAuth, isElevated, hasRole } from '@/lib/session'
+import { withAuth, can } from '@/lib/session'
 import { broadcast } from '@/lib/broadcast'
 import { parseCustomer, attachCustomer } from '@/lib/customers'
 import { sendReviewSms } from '@/lib/reviewSms'
@@ -11,12 +11,12 @@ export default withAuth(async (req, res) => {
   if (req.method === 'POST') return createSale(req, res)
   if (req.method === 'GET')  return listSales(req, res)
   return res.status(405).json({ message: 'Method not allowed' })
-})
+}, { perms: ['sell', 'serve', 'reports'], shift: true })
 
 // POST { client_ref, items: [{menu_item_id, qty}], payments: [{method, amount, tendered?, reference?}],
 //        customer?: {phone, name?, opt_in?} }
 async function createSale(req, res) {
-  if (!hasRole(req.user, 'cashier')) {
+  if (!can(req.user, 'sell')) {
     return res.status(403).json({ message: 'Only cashiers can take payments.' })
   }
 
@@ -76,7 +76,7 @@ async function listSales(req, res) {
   } else if (view === 'recent') {
     q = q.eq('business_date', today()).not('status', 'in', '(pending_payment,failed)') // unpaid attempts aren't sales
       .order('created_at', { ascending: false }).limit(30)
-    if (!isElevated(req.user.role)) q = q.eq('cashier_id', req.user.sid) // staff see only their own sales
+    if (!can(req.user, 'reports')) q = q.eq('cashier_id', req.user.sid) // staff see only their own sales
   } else {
     return res.status(400).json({ message: 'Unknown view.' })
   }

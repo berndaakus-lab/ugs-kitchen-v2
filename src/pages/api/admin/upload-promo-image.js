@@ -50,4 +50,4 @@ async function handler(req, res) {
 }
 
 // Signed-in staff only (admin).
-export default withStaff(handler, { roles: ["admin"] })
+export default withStaff(handler, { perms: ['promos'] })

@@ -7,7 +7,7 @@ import { withAuth } from '@/lib/session'
 export default withAuth(async (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : today()
   const channel = ['walk_in', 'online'].includes(req.query.channel) ? req.query.channel : null
-  const allBranches = req.query.scope === 'all' && req.user.role === 'admin'
+  const allBranches = req.query.scope === 'all' && req.user.scopeAll
 
   let q = db
     .from('sales_unified')
@@ -27,4 +27,4 @@ export default withAuth(async (req, res) => {
     sales = data.map(s => ({ ...s, branch_name: names[s.branch_id] || '' }))
   }
   return res.status(200).json({ sales })
-}, { roles: ['manager'] })
+}, { perms: ['reports'] })

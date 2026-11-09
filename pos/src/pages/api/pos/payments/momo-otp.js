@@ -24,4 +24,4 @@ export default withAuth(async (req, res) => {
   } catch (err) {
     return res.status(400).json({ message: paystackError(err) })
   }
-}, { roles: ['cashier'] })
+}, { perms: ['sell'] })

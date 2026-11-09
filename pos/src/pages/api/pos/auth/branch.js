@@ -4,7 +4,7 @@ import { withAuth, createSession } from '@/lib/session'
 // POST { branch_id } — admin switches the branch they are working in.
 export default withAuth(async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
-  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only the admin can switch branches.' })
+  if (!req.user.scopeAll) return res.status(403).json({ message: 'Only people who work across branches can switch.' })
 
   const { data: branch } = await db
     .from('branches')

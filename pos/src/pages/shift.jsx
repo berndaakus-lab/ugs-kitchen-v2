@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Printer } from 'lucide-react'
 import Layout, { ErrorText, Stat } from '@/components/Layout'
 import { usePrinter } from '@/components/Print'
-import { api, ghs, dateTime, time, METHOD_LABEL, shownMethods, hasRole, userRoles, useMe } from '@/lib/client'
+import { api, can, ghs, dateTime, time, METHOD_LABEL, shownMethods, useMe } from '@/lib/client'
 
 export default function Shift() {
   const [me, reloadMe] = useMe()
@@ -10,10 +10,15 @@ export default function Shift() {
 
   return (
     <Layout me={me}>
-      {/* Someone who is both cashier and server sees both: their cash shift and what they served. */}
+      {/* People who sell run a cash shift; everyone else whose role runs on
+          shift clocks in and out (duty shift). Servers also see what they served. */}
       <div className="mx-auto max-w-2xl space-y-4 p-4">
-        {me && hasRole(me.user, 'cashier') && <CashierShift me={me} reloadMe={reloadMe} print={print} />}
-        {me && userRoles(me.user).includes('server') && <ServerReport print={print} />}
+        {me && can(me.user, 'sell') && <CashierShift me={me} reloadMe={reloadMe} print={print} />}
+        {me && !can(me.user, 'sell') && me.user.runsShift && <DutyShift me={me} reloadMe={reloadMe} print={print} />}
+        {me && can(me.user, 'serve') && <ServerReport print={print} />}
+        {me && !can(me.user, 'sell', 'serve') && !me.user.runsShift && (
+          <div className="card text-center text-gray-500">Your role does not run on shifts.</div>
+        )}
       </div>
       {slip}
     </Layout>
@@ -193,6 +198,95 @@ function ServerReport({ print }) {
         </div>
       </div>
       <button className="btn-ghost" onClick={() => print('served', report)}><Printer size={18} /> Print report</button>
+    </>
+  )
+}
+
+// Clock in / clock out for roles without a cash drawer (kitchen head, branch
+// manager who doesn't sell, server …). Ending it prints what they did.
+function DutyShift({ me, reloadMe, print }) {
+  const [report, setReport] = useState(null)
+  const [notes, setNotes] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const open = me?.shift && me.shift.kind === 'duty' ? me.shift : null
+
+  useEffect(() => {
+    if (open) api(`shifts/${open.id}/report`).then(r => setReport(r.report)).catch(e => setError(e.message))
+  }, [open?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function start() {
+    setBusy(true); setError('')
+    try {
+      await api('shifts/open', { method: 'POST', body: {} })
+      await reloadMe()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function end(e) {
+    e.preventDefault()
+    if (!confirm('End your shift?')) return
+    setBusy(true); setError('')
+    try {
+      const { report: r } = await api('shifts/close', { method: 'POST', body: { notes } })
+      setReport(r)
+      print('duty', r)
+      reloadMe()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open && !report?.shift?.closed_at) {
+    return (
+      <div className="card space-y-3 text-center">
+        <h2 className="text-lg font-black">Start your shift</h2>
+        <p className="text-sm text-gray-600">Your role runs on shift. Start it before you send, receive, serve or count.</p>
+        <ErrorText>{error}</ErrorText>
+        <button className="btn-primary w-full" onClick={start} disabled={busy}>{busy ? 'Starting…' : 'Start shift'}</button>
+      </div>
+    )
+  }
+  if (!report) return <div className="card text-center text-gray-500">{error ? <ErrorText>{error}</ErrorText> : 'Loading…'}</div>
+
+  const s = report.shift
+  const closed = Boolean(s.closed_at)
+  const fmt = n => Number(Number(n).toFixed(2))
+  return (
+    <>
+      <div className="card space-y-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-black">{closed ? 'Shift ended' : 'On shift'}</h2>
+          <span className="text-sm text-gray-500">Started {dateTime(s.opened_at)}{closed && ` · ended ${time(s.closed_at)}`}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Stat label="Deliveries sent" value={report.deliveries_sent.count} />
+          <Stat label="Deliveries received" value={report.deliveries_received.count} />
+          <Stat label="Closing counts" value={report.counts} />
+          <Stat label="Voids approved" value={report.voids_approved.length} />
+        </div>
+        {[['Sent', report.deliveries_sent.items], ['Received', report.deliveries_received.items], ['Served', report.served]].map(([label, items]) => items.length > 0 && (
+          <div key={label}>
+            <h3 className="text-sm font-black">{label}</h3>
+            <div className="text-sm text-gray-700">{items.map(i => `${fmt(i.qty)} ${i.unit ? i.unit + ' ' : ''}${i.name}`).join(' · ')}</div>
+          </div>
+        ))}
+      </div>
+      <button className="btn-ghost" onClick={() => print('duty', report)}><Printer size={18} /> Print summary</button>
+      {!closed && (
+        <form onSubmit={end} className="card space-y-3">
+          <h2 className="text-lg font-black">End shift</h2>
+          <input className="input" placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
+          <ErrorText>{error}</ErrorText>
+          <button className="btn-dark w-full" disabled={busy}>{busy ? 'Ending…' : 'End shift & print summary'}</button>
+        </form>
+      )}
     </>
   )
 }

@@ -166,3 +166,37 @@ export async function daySummary(branchId, date) {
     })),
   }
 }
+
+// A duty shift (no cash drawer): what the person did between clock-in and clock-out.
+export async function dutyReport(shift) {
+  const from = shift.opened_at
+  const to = shift.closed_at || new Date().toISOString()
+  const sid = shift.staff_id
+  const lines = 'stock_item_id, qty_sent, qty_received, inv_stock_items(name, unit)'
+  const [served, sent, received, counts, voids, names] = await Promise.all([
+    db.from('pos_serve_events').select('items').eq('staff_id', sid).gte('at', from).lte('at', to),
+    db.from('inv_dispatches').select(`id, sent_at, status, inv_dispatch_lines(${lines})`).eq('sent_by', sid).gte('sent_at', from).lte('sent_at', to),
+    db.from('inv_dispatches').select(`id, received_at, status, inv_dispatch_lines(${lines})`).eq('received_by', sid).gte('received_at', from).lte('received_at', to),
+    db.from('inv_counts').select('id, at').eq('counted_by', sid).gte('at', from).lte('at', to),
+    db.from('pos_sales').select('ticket_no, total, void_reason, voided_at').eq('voided_by_id', sid).gte('voided_at', from).lte('voided_at', to),
+    staffNames([sid]),
+  ])
+  for (const r of [served, sent, received, counts, voids]) if (r.error) throw r.error
+
+  const add = (map, name, unit, qty) => { const row = map[name] ||= { name, unit, qty: 0 }; row.qty = round(row.qty + Number(qty || 0)) }
+  const servedItems = {}
+  for (const e of served.data) for (const i of e.items || []) add(servedItems, i.name, null, i.qty)
+  const sentItems = {}, receivedItems = {}
+  for (const d of sent.data) for (const l of d.inv_dispatch_lines) add(sentItems, l.inv_stock_items?.name, l.inv_stock_items?.unit, l.qty_sent)
+  for (const d of received.data) for (const l of d.inv_dispatch_lines) add(receivedItems, l.inv_stock_items?.name, l.inv_stock_items?.unit, l.qty_received ?? l.qty_sent)
+  const list = m => Object.values(m).sort((a, b) => b.qty - a.qty)
+
+  return {
+    shift: { ...shift, staff_name: names[sid] },
+    served: list(servedItems),
+    deliveries_sent: { count: sent.data.length, items: list(sentItems) },
+    deliveries_received: { count: received.data.length, short: received.data.filter(d => d.status === 'received_short').length, items: list(receivedItems) },
+    counts: counts.data.length,
+    voids_approved: voids.data.map(v => ({ ticket_no: v.ticket_no, total: Number(v.total), reason: v.void_reason, at: v.voided_at })),
+  }
+}

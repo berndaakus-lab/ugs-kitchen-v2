@@ -20,4 +20,4 @@ export default withAuth(async (req, res) => {
   })
   await broadcast(req.user.branch_id, 'stock_changed', {})
   return res.status(200).json({ ok: true })
-}, { roles: ['manager'] })
+}, { perms: ['stock_adjust'] })

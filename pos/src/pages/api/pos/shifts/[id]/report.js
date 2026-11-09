@@ -1,20 +1,20 @@
 import { db } from '@/lib/supabaseAdmin'
-import { withAuth } from '@/lib/session'
-import { shiftReport } from '@/lib/reports'
+import { withAuth, can } from '@/lib/session'
+import { shiftReport, dutyReport } from '@/lib/reports'
 
-// GET — Z-report (closed shift) or X-report (open shift).
-// Your own shift always (even after an admin switches branch); a manager sees
-// any shift at their branch; the admin sees any shift.
+// GET — cash shift: Z-report (closed) or X-report (open); duty shift: what was done.
+// Your own shift always; people with Reports see shifts at their branch, or
+// anywhere if they work across branches.
 export default withAuth(async (req, res) => {
   const { data: shift } = await db.from('pos_shifts').select('*').eq('id', req.query.id).maybeSingle()
 
-  const { role, sid, branch_id } = req.user
+  const u = req.user
   const allowed = shift && (
-    shift.staff_id === sid ||
-    role === 'admin' ||
-    (role === 'manager' && shift.branch_id === branch_id)
+    shift.staff_id === u.sid ||
+    (can(u, 'reports') && (u.scopeAll || shift.branch_id === u.branch_id))
   )
   if (!allowed) return res.status(404).json({ message: 'Shift not found.' })
 
-  return res.status(200).json({ report: await shiftReport(shift) })
-}, { roles: ['cashier'] })
+  if (shift.kind === 'duty') return res.status(200).json({ report: await dutyReport(shift), kind: 'duty' })
+  return res.status(200).json({ report: await shiftReport(shift), kind: 'cash' })
+}, {})
