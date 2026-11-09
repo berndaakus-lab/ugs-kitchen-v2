@@ -33,4 +33,4 @@ export default withAuth(async (req, res) => {
     name,
     name_source: c?.name ? 'saved' : name ? 'momo' : null,
   })
-}, { roles: ['cashier'] })
+}, { perms: ['sell'] })

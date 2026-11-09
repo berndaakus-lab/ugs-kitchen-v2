@@ -20,4 +20,4 @@ export default withAuth(async (req, res) => {
   const sale = await loadSale(req.query.id)
   await broadcast(req.user.branch_id, 'sale_served', { id: sale.id, ticket_no: sale.ticket_no, status })
   return res.status(200).json({ sale })
-}, { roles: ['server'] })
+}, { perms: ['serve'], shift: true })

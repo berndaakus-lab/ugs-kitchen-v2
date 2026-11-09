@@ -6,7 +6,7 @@ export default withAuth(async (req, res) => {
 
   // An admin can switch branch while a shift is open elsewhere; tell the
   // screens which branch the open shift belongs to.
-  if (shift && shift.branch_id !== req.user.branch_id) {
+  if (shift?.branch_id && shift.branch_id !== req.user.branch_id) {
     const { data: b } = await db.from('branches').select('name').eq('id', shift.branch_id).maybeSingle()
     shift.branch_name = b?.name || 'another branch'
     shift.elsewhere = true

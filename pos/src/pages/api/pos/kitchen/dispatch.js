@@ -18,4 +18,4 @@ export default withAuth(async (req, res) => {
   const id = await rpc('inv_send_dispatch', { p_to_branch: branch_id, p_lines: lines, p_staff: req.user.sid, p_note: note || null })
   await broadcast(branch_id, 'delivery_sent', { id })
   return res.status(200).json({ id })
-}, { roles: ['kitchen'] })
+}, { perms: ['stock_send'], shift: true })

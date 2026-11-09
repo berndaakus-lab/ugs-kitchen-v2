@@ -19,4 +19,4 @@ export default withAuth(async (req, res) => {
     sale_id:  sale.id,
   })
   return res.status(200).json({ sale })
-})
+}, { perms: ['sell'] })

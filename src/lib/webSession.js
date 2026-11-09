@@ -6,6 +6,7 @@
 import crypto from 'crypto'
 import { SignJWT, jwtVerify } from 'jose'
 import { createClient } from '@supabase/supabase-js'
+import { ALL_PERMISSIONS, resolveAccess, can } from './permissions'
 
 export const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -53,29 +54,48 @@ async function read(req, name, kind) {
 }
 
 // ── Staff ──────────────────────────────────────────────────────
-// user: { id (staff.id, null for the owner), name, role: 'admin'|'staff'|'delivery', branch_id }
-export async function setStaffSession(res, user) {
-  addCookie(res, cookie(STAFF_COOKIE, await sign({ ...user, kind: 'staff' }, STAFF_AGE), STAFF_AGE))
+// Session: { sid (pos_staff.id) } for staff, or { owner: true } for the owner's
+// break-glass login (ADMIN_PIN). What they may do is loaded from their roles
+// (pos_role_defs, shared with the POS) on every request.
+export async function setStaffSession(res, session) {
+  addCookie(res, cookie(STAFF_COOKIE, await sign({ ...session, kind: 'staff' }, STAFF_AGE), STAFF_AGE))
 }
 export const clearStaffSession = res => addCookie(res, cookie(STAFF_COOKIE, '', 0))
 export const readStaff = req => read(req, STAFF_COOKIE, 'staff')
 
-// Wrap an API route: only signed-in staff with one of `roles` (admin always passes).
-export function withStaff(handler, { roles } = {}) {
+const OWNER = { id: null, name: 'Admin', isAdmin: true, perms: ALL_PERMISSIONS, scopeAll: true, branch_id: null, roleNames: ['Admin'], active: true }
+
+// The person behind a staff session, with what they may do right now.
+export async function staffUser(session) {
+  if (!session) return null
+  if (session.owner) return { ...OWNER }
+  if (!session.sid) return null
+  const { data: ps } = await db.from('pos_staff')
+    .select('id, staff_id, pos_role, pos_roles, branch_id, is_active, staff:staff_id(name, is_active)')
+    .eq('id', session.sid).maybeSingle()
+  if (!ps || !ps.is_active || !ps.staff?.is_active) return null
+  const keys = ps.pos_roles?.length ? ps.pos_roles : [ps.pos_role]
+  const { data: defs } = await db.from('pos_role_defs').select('*').in('key', keys)
+  const access = resolveAccess(defs || [])
+  return {
+    id: ps.staff_id, sid: ps.id, name: ps.staff.name, ...access,
+    // all-branch people pick a branch on the page; everyone else is held to theirs
+    branch_id: access.scopeAll ? null : ps.branch_id,
+    active: true,
+  }
+}
+
+export { can }
+
+// Wrap an API route: signed-in staff with any of the given permissions (Admin always passes).
+export function withStaff(handler, { perms } = {}) {
   return async (req, res) => {
-    const user = await readStaff(req)
-    if (!user) return res.status(401).json({ message: 'Please sign in again.' })
-    if (roles && user.role !== 'admin' && !roles.includes(user.role)) {
-      return res.status(403).json({ message: 'You are not allowed to do that.' })
+    const user = await staffUser(await readStaff(req))
+    if (!user) {
+      clearStaffSession(res)
+      return res.status(401).json({ message: 'Please sign in again.' })
     }
-    // A disabled staff account loses access at once, not when its cookie expires.
-    if (user.id) {
-      const { data } = await db.from('staff').select('is_active').eq('id', user.id).maybeSingle()
-      if (!data?.is_active) {
-        clearStaffSession(res)
-        return res.status(401).json({ message: 'Account is disabled. Contact admin.' })
-      }
-    }
+    if (perms && !can(user, ...perms)) return res.status(403).json({ message: 'You are not allowed to do that.' })
     req.user = user
     try {
       return await handler(req, res)

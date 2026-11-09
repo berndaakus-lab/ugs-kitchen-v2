@@ -4,7 +4,7 @@ import { Link2, Plus, Search, Trash2, Wand2, X } from 'lucide-react'
 import Layout, { ErrorText, Modal } from '@/components/Layout'
 import { api, ghs, useMe } from '@/lib/client'
 
-const ROLES = ['manager']
+const ROLES = ['stock_setup']   // permissions that open this page
 
 // Stock setup (managers): what is counted, and what each dish uses.
 // A dish with no links is untracked and sells exactly as before.
@@ -116,7 +116,7 @@ export default function StockSetup() {
       </div>
       {editingItem && <ItemModal item={editingItem} units={data.units} onClose={() => setEditingItem(null)} onSaved={() => { setEditingItem(null); load() }} />}
       {editingDish && (
-        <LinksModal dish={editingDish} dishes={data.dishes} items={data.items.filter(i => i.is_active)} units={data.units} isAdmin={me.user.role === 'admin'}
+        <LinksModal dish={editingDish} dishes={data.dishes} items={data.items.filter(i => i.is_active)} units={data.units} isAdmin={me.user.scopeAll}
           onClose={() => { setEditingDish(null); load() }}
           onSaved={n => { setMsg(n > 1 ? `Saved for ${editingDish.name} at ${n} branches.` : ''); setEditingDish(null); load() }} />
       )}

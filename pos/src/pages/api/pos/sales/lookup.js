@@ -24,4 +24,4 @@ export default withAuth(async (req, res) => {
   if (!data) return res.status(404).json({ message: `Ticket ${code} not found at this branch.` })
 
   return res.status(200).json({ sale: await loadSale(data.id) })
-})
+}, { perms: ['sell', 'serve', 'reports'] })

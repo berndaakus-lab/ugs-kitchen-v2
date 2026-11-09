@@ -1,6 +1,7 @@
 import Head from 'next/head'
 import { useState, useEffect, useCallback } from 'react'
 import { adminDb, staffLogin, staffMe, staffLogout } from '../lib/adminDb'
+import { can } from '../lib/permissions'
 import { MapPin, CheckCircle2, RefreshCw, LogOut, Package } from 'lucide-react'
 import { useAdminPush } from '../hooks/usePush'
 
@@ -239,6 +240,14 @@ export default function DeliveryPage() {
   }
 
   if (!currentUser) return checkingSession ? null : <LoginScreen onLogin={setCurrentUser} />
+  if (!can(currentUser, 'delivery', 'online_orders_manage')) {
+    return (
+      <div className="min-h-screen bg-brand-cream flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="font-bold text-brand-dark">Your role doesn't include the delivery screen.</p>
+        <button onClick={() => { staffLogout(); setCurrentUser(null) }} className="text-sm font-semibold text-brand-orange">Sign out</button>
+      </div>
+    )
+  }
 
   // Filter out pick-up orders — delivery guy doesn't need those
   const deliveryOrders = orders.filter(o => !o.delivery_location?.toLowerCase().includes('pick'))

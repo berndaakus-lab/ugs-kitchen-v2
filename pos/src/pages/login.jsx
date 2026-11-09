@@ -15,8 +15,9 @@ export default function Login() {
     setBusy(true)
     setError('')
     try {
-      const { user } = await api('auth/login', { method: 'POST', body: { username, pin } })
-      router.replace(homeFor(user.role))
+      await api('auth/login', { method: 'POST', body: { username, pin } })
+      const { user, shift } = await api('auth/me')
+      router.replace(homeFor(user, shift))
     } catch (err) {
       setError(err.message)
       setPin('')

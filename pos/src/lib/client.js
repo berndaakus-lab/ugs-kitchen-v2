@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { createClient } from '@supabase/supabase-js'
+import { can } from './permissions'
 
 export async function api(path, { method = 'GET', body } = {}) {
   const res = await fetch(`/api/pos/${path}`, {
@@ -40,39 +41,52 @@ export const uuid = () => {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
 }
 
-// Loads the session; redirects to /login when signed out. `roles` limits the page.
-export function useMe(roles) {
+// Loads the session; redirects to /login when signed out. `perms` limits the
+// page to people with any of those permissions (others go to their home screen).
+export function useMe(perms) {
   const router = useRouter()
   const [me, setMe] = useState(null)
 
   const reload = useCallback(async () => {
     try {
       const data = await api('auth/me')
-      if (roles && !roles.some(r => hasRole(data.user, r))) {
-        router.replace(homeFor(data.user.role))
+      if (perms && !can(data.user, ...perms)) {
+        router.replace(homeFor(data.user))
         return
       }
       setMe(data)
     } catch (err) {
       if (err.status === 401) router.replace('/login')
     }
-  }, [router, roles?.join()]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [router, perms?.join()]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { reload() }, [reload])
   return [me, reload]
 }
 
-export const isElevated = role => role === 'manager' || role === 'admin'
+export { can }
+export const roleLabel = user => (user?.roleNames || []).join(' + ')
 
-// A person can have several roles (e.g. cashier + server). `role` is the main
-// one; sessions from before multi-role carry only `role`.
-export const userRoles = user => (user?.roles?.length ? user.roles : [user?.role].filter(Boolean))
-export const hasRole = (user, role) => isElevated(user?.role) || userRoles(user).includes(role)
-export const roleLabel = roles =>
-  (roles || []).map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(' + ')
+// Every screen, in menu order, and who may open it.
+export const SCREENS = [
+  ['/manager',           'Today',     u => can(u, 'reports')],
+  ['/cashier',           'Sell',      u => can(u, 'sell')],
+  ['/server',            'Serve',     u => can(u, 'serve')],
+  ['/kitchen',           'Kitchen',   u => u.kitchen && can(u, 'stock_send', 'activity')],
+  // Stock is a branch screen: kitchen-only people (no branch role) use Kitchen instead.
+  ['/stock',             'Stock',     u => can(u, 'stock_receive', 'stock_count', 'stock_adjust', 'stock_setup', 'activity') && (u.scopeAll || (u.scopes || []).includes('branch'))],
+  ['/shift',             'My shift',  u => u.runsShift || can(u, 'sell', 'serve')],
+  ['/manager/customers', 'Customers', u => can(u, 'customers')],
+  ['/manager/staff',     'Staff',     u => can(u, 'staff_assign')],
+  ['/manager/roles',     'Roles',     u => can(u, 'roles_manage')],
+]
+export const screensFor = user => (user ? SCREENS.filter(([, , ok]) => ok(user)) : [])
 
-export function homeFor(role) {
-  return { cashier: '/cashier', server: '/server', manager: '/manager', admin: '/manager', kitchen: '/kitchen' }[role] || '/login'
+// Where a person lands after login: My shift if their role runs on shift and
+// it isn't open yet, otherwise their first screen.
+export function homeFor(user, shift) {
+  if (user?.runsShift && shift === null) return '/shift'
+  return screensFor(user)[0]?.[0] || '/shift'
 }
 
 // Payment methods the shop uses (cash + MoMo prompt); others still show in

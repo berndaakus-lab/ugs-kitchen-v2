@@ -2,23 +2,9 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { KeyRound, LogOut } from 'lucide-react'
-import { api, roleLabel, userRoles } from '@/lib/client'
+import { api, roleLabel, screensFor } from '@/lib/client'
 
-const NAV = {
-  cashier: [['/cashier', 'Sell'], ['/stock', 'Stock'], ['/shift', 'My shift']],
-  server:  [['/server', 'Serve'], ['/stock', 'Stock'], ['/shift', 'My report']],
-  manager: [['/manager', 'Today'], ['/cashier', 'Sell'], ['/server', 'Serve'], ['/stock', 'Stock'], ['/shift', 'My shift'], ['/manager/customers', 'Customers'], ['/manager/staff', 'Staff']],
-  kitchen: [['/kitchen', 'Kitchen']],
-}
-NAV.admin = [...NAV.manager, ['/kitchen', 'Kitchen']]
-
-// Menu for everything the person may do, e.g. cashier + server → Sell, Serve, My shift.
-function navFor(user) {
-  const seen = new Set()
-  return userRoles(user).flatMap(r => NAV[r] || []).filter(([href]) => !seen.has(href) && seen.add(href))
-}
-
-// Admin works across branches: every active branch from the online app is listed.
+// People who work across branches (Admin, General manager) switch branch here.
 function BranchSwitcher({ me }) {
   const [branches, setBranches] = useState([])
   useEffect(() => { api('branches').then(r => setBranches(r.branches)).catch(() => {}) }, [])
@@ -57,11 +43,11 @@ export default function Layout({ me, children, right, fill }) {
       {/* Phone: two rows (brand + actions, then a scrollable nav). md+: one row. */}
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-brand-dark px-3 py-2 text-white md:px-4">
         <div className="font-black text-brand-orange">UGs POS</div>
-        {me && (me.user.role === 'admin'
+        {me && (me.user.scopeAll
           ? <BranchSwitcher me={me} />
           : <div className="max-w-[40vw] truncate text-sm text-white/70">{me.user.branch_name}</div>)}
         <nav className="no-scrollbar order-last -mx-1 flex w-full gap-1 overflow-x-auto md:order-none md:mx-0 md:w-auto">
-          {me && navFor(me.user).map(([href, label]) => (
+          {me && screensFor(me.user).map(([href, label]) => (
             <Link
               key={href}
               href={href}
@@ -73,7 +59,7 @@ export default function Layout({ me, children, right, fill }) {
         </nav>
         <div className="ml-auto flex items-center gap-1 sm:gap-3">
           {right}
-          {me && <span className="hidden text-sm lg:inline">{me.user.name} · <span className="text-white/70">{roleLabel(userRoles(me.user))}</span></span>}
+          {me && <span className="hidden text-sm lg:inline">{me.user.name} · <span className="text-white/70">{roleLabel(me.user)}</span></span>}
           {me && (
             <button onClick={() => setChangingPin(true)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Change my PIN" title="Change my PIN">
               <KeyRound size={18} />
@@ -82,6 +68,11 @@ export default function Layout({ me, children, right, fill }) {
           <button onClick={logout} className="rounded-lg p-2 hover:bg-white/10" aria-label="Log out" title="Log out"><LogOut size={18} /></button>
         </div>
       </header>
+      {me?.user.runsShift && !me.shift && router.pathname !== '/shift' && (
+        <Link href="/shift" className="block shrink-0 bg-amber-100 px-4 py-2 text-center text-sm font-semibold text-amber-900">
+          You're not on shift. Start your shift →
+        </Link>
+      )}
       <main className={`flex-1 ${fill ? 'min-h-0' : ''}`}>{me ? children : <div className="p-8 text-center text-gray-400">Loading…</div>}</main>
       {changingPin && <ChangePinModal onClose={() => setChangingPin(false)} />}
     </div>

@@ -31,6 +31,7 @@ export function usePrinter() {
       {job.kind === 'online'  && <OnlineReceipt order={job.data} />}
       {job.kind === 'zreport' && <ZReport report={job.data} />}
       {job.kind === 'served'  && <ServedReport report={job.data} />}
+      {job.kind === 'duty'    && <DutyReport report={job.data} />}
     </div>
   )
 
@@ -199,6 +200,39 @@ export function ServedReport({ report }) {
           <div className="pl-2 text-[10px]">{(t.items || []).map(i => `${i.qty}× ${i.name}`).join(', ')}</div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// A duty shift (no cash drawer): what the person did between clock-in and clock-out.
+export function DutyReport({ report }) {
+  const s = report.shift
+  const fmt = n => Number(Number(n).toFixed(2))
+  return (
+    <div className="slip">
+      <Head title="SHIFT SUMMARY" />
+      <div className="text-xs">{s.staff_name}</div>
+      <div className="text-xs">{dateTime(s.opened_at)} – {s.closed_at ? dateTime(s.closed_at) : 'still open'}</div>
+      <Rule />
+      {report.served.length > 0 && <>
+        <div className="text-xs font-bold">SERVED</div>
+        {report.served.map(i => <Row key={i.name} left={i.name} right={fmt(i.qty)} />)}
+        <Rule />
+      </>}
+      {report.deliveries_sent.count > 0 && <>
+        <div className="text-xs font-bold">SENT ({report.deliveries_sent.count} deliveries)</div>
+        {report.deliveries_sent.items.map(i => <Row key={i.name} left={i.name} right={`${fmt(i.qty)} ${i.unit || ''}`} />)}
+        <Rule />
+      </>}
+      {report.deliveries_received.count > 0 && <>
+        <div className="text-xs font-bold">RECEIVED ({report.deliveries_received.count}{report.deliveries_received.short ? `, ${report.deliveries_received.short} short` : ''})</div>
+        {report.deliveries_received.items.map(i => <Row key={i.name} left={i.name} right={`${fmt(i.qty)} ${i.unit || ''}`} />)}
+        <Rule />
+      </>}
+      <Row left="Closing counts" right={report.counts} />
+      <Row left="Voids approved" right={report.voids_approved.length} />
+      {report.voids_approved.map(v => <Row key={v.ticket_no + v.at} left={`${v.ticket_no} ${v.reason || ''}`} right={fmt(v.total)} />)}
+      {s.notes && <><Rule /><div className="text-xs">Notes: {s.notes}</div></>}
     </div>
   )
 }

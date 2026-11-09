@@ -6,4 +6,4 @@ import { serverReport } from '@/lib/reports'
 export default withAuth(async (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : today()
   return res.status(200).json({ report: await serverReport(req.user.sid, date) })
-}, { roles: ['server'] })
+}, { perms: ['serve'] })

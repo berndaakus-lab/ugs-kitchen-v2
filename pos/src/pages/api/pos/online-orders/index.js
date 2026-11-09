@@ -7,4 +7,4 @@ import { today } from '@/lib/supabaseAdmin'
 export default withAuth(async (req, res) => {
   const orders = await recentOrders(req.user.branch_id)
   return res.status(200).json({ orders: matchOrders(orders, req.query.q, today()) })
-}, { roles: ['server', 'cashier'] })
+}, { perms: ['online_orders'] })

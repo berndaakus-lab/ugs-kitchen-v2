@@ -4,7 +4,7 @@ import Layout, { ErrorText, StatusBadge } from '@/components/Layout'
 import { OnlineOrderPanel, OnlineOrderRow, useOnlineOrders } from '@/components/OnlineOrders'
 import { api, ghs, time, useBranchEvents, useMe } from '@/lib/client'
 
-const ROLES = ['server']
+const ROLES = ['serve']   // permissions that open this page
 
 // "#A1B2C3" (online order no.) or a phone number → online order search.
 // A scanned QR is a sale id (UUID, which also contains many digits) → walk-in.

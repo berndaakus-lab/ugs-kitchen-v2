@@ -3,7 +3,7 @@ import { Send, Trash2 } from 'lucide-react'
 import Layout, { ErrorText } from '@/components/Layout'
 import { api, dateTime, time, useMe } from '@/lib/client'
 
-const ROLES = ['kitchen']
+const ROLES = ['stock_send', 'activity']   // permissions that open this page
 const fmt = n => (Number.isInteger(n) ? n : Number(n).toFixed(1))
 const STATUS = {
   sent:           ['bg-blue-100 text-blue-800', 'Waiting for branch'],

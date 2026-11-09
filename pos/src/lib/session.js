@@ -1,5 +1,10 @@
 // Signed httpOnly session cookie for POS staff (server-only).
 import { SignJWT, jwtVerify } from 'jose'
+import { loadAccess } from './access'
+import { openShiftFor } from './supabaseAdmin'
+import { can } from './permissions'
+
+export { can }
 
 const COOKIE  = 'pos_session'
 const MAX_AGE = 14 * 60 * 60 // one long shift
@@ -40,20 +45,27 @@ export async function readSession(req) {
   }
 }
 
-// Managers (one branch) and admins (all branches) may use every screen.
-// `role` is the person's main role; `roles` everything they may do
-// (e.g. ['cashier','server']). Sessions from before multi-role have only `role`.
-export const isElevated = role => role === 'manager' || role === 'admin'
-export const userRoles = user => (user?.roles?.length ? user.roles : [user?.role].filter(Boolean))
-export const hasRole = (user, role) => isElevated(user?.role) || userRoles(user).includes(role)
-
-// Wrap an API handler: requires a session, optionally one of `roles`.
-export function withAuth(handler, { roles } = {}) {
+// What each person may do comes from their roles (lib/access.js), loaded on
+// every request: req.user gets perms, isAdmin, scopeAll, kitchen, runsShift …
+//
+//   withAuth(handler, { perms: ['sell'] })         any of these permissions
+//   withAuth(handler, { perms: ['sell'], shift: true })
+//       … and, if the person runs on shift, a write needs their shift open
+//   withAuth(handler, { all: true })               all-branch people only
+export function withAuth(handler, { perms, shift, all } = {}) {
   return async (req, res) => {
-    const user = await readSession(req)
-    if (!user) return res.status(401).json({ message: 'Please log in.' })
-    if (roles && !roles.some(r => hasRole(user, r))) {
-      return res.status(403).json({ message: 'Not allowed for your role.' })
+    const session = await readSession(req)
+    if (!session) return res.status(401).json({ message: 'Please log in.' })
+    const access = await loadAccess(session.sid)
+    if (!access?.active) {
+      clearSession(res)
+      return res.status(401).json({ message: 'Your login is disabled. Ask a manager.' })
+    }
+    const user = { ...session, ...access }
+    if (perms && !can(user, ...perms)) return res.status(403).json({ message: 'Not allowed for your role.' })
+    if (all && !user.scopeAll) return res.status(403).json({ message: 'Not allowed for your role.' })
+    if (shift && user.runsShift && req.method !== 'GET' && !(await openShiftFor(user.sid))) {
+      return res.status(409).json({ message: 'Start your shift first (My shift).', code: 'NO_SHIFT' })
     }
     req.user = user
     try {
@@ -67,6 +79,8 @@ export function withAuth(handler, { roles } = {}) {
 // Map known exceptions raised by the pos_* SQL functions to friendly messages.
 const DB_MESSAGES = {
   NO_OPEN_SHIFT:      [409, 'Open a shift before selling.'],
+  UNKNOWN_ROLE:       [400, 'That role no longer exists. Refresh the page.'],
+  BRANCH_REQUIRED:    [400, 'Choose a branch: one of these roles works at one branch.'],
   ITEM_UNAVAILABLE:   [409, 'One or more items are no longer available. Refresh the menu.'],
   PAYMENT_MISMATCH:   [400, 'Payment does not match the total.'],
   SALE_NOT_FOUND:     [404, 'Ticket not found.'],

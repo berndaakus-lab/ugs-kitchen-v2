@@ -53,4 +53,4 @@ export default withAuth(async (req, res) => {
   return res.status(200).json({
     customers: customers.map(c => ({ ...c, visits: stats[c.id]?.visits || 0, spent: stats[c.id]?.spent || 0 })),
   })
-}, { roles: ['manager'] })
+}, { perms: ['customers'] })

@@ -20,4 +20,4 @@ export default withAuth(async (req, res) => {
     }))
   }
   return res.status(200).json({ branches, items, dispatches: recent, levels })
-}, { roles: ['kitchen'] })
+}, { perms: ['stock_send'] })

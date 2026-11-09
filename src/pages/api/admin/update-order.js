@@ -5,7 +5,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createHash, randomUUID } from 'crypto'
 import { sendSMS, toInternational, STATUS_SMS, msgOrderDeliveredWithToken } from '../../../lib/sms'
-import { withStaff } from '../../../lib/webSession'
+import { withStaff, can } from '../../../lib/webSession'
 import { pushCustomer } from '../../../lib/push'
 
 const supabase = createClient(
@@ -25,13 +25,14 @@ async function handler(req, res) {
   if (status && !['paid', 'preparing', 'ready', 'delivered', 'failed', 'cancelled'].includes(status)) {
     return res.status(400).json({ message: 'Invalid status' })
   }
-  if (status === 'paid' && me.role !== 'admin') {
+  if (status === 'paid' && !me.isAdmin) {
     return res.status(403).json({ message: 'Only the admin can mark an order paid.' })
   }
-  if (me.role === 'delivery' && (status !== 'delivered' || wait_time_minutes != null)) {
+  // Riders (Delivery, without order management) can only mark orders delivered.
+  if (!can(me, 'online_orders_manage') && (status !== 'delivered' || wait_time_minutes != null)) {
     return res.status(403).json({ message: 'Delivery can only mark orders delivered.' })
   }
-  if (me.role !== 'admin' && me.branch_id) {
+  if (!me.scopeAll) {
     const { data: own } = await supabase.from('orders').select('branch_id').eq('id', orderId).maybeSingle()
     if (!own || own.branch_id !== me.branch_id) return res.status(404).json({ message: 'Order not found' })
   }
@@ -122,4 +123,4 @@ async function handler(req, res) {
 }
 
 // Signed-in staff only (staff, delivery).
-export default withStaff(handler, { roles: ["staff","delivery"] })
+export default withStaff(handler, { perms: ['online_orders_manage', 'delivery'] })

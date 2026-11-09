@@ -8,7 +8,7 @@ import { branchLevels, branchLocation, dispatches } from '@/lib/stock'
 // sold / adjusted today and what's left, plus short deliveries to flag.
 export default withAuth(async (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : today()
-  const branchId = req.query.scope === 'all' && req.user.role === 'admin' ? null : req.user.branch_id
+  const branchId = req.query.scope === 'all' && req.user.scopeAll ? null : req.user.branch_id
 
   let shiftsQ = db.from('pos_shifts')
     .select('id, staff_id, opened_at, closed_at, opening_float, expected_cash, counted_cash, variance')
@@ -34,4 +34,4 @@ export default withAuth(async (req, res) => {
     }
   }
   return res.status(200).json({ summary, shifts: shifts || [], stock })
-}, { roles: ['manager'] })
+}, { perms: ['reports'] })

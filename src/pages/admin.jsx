@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { adminDb, staffLogin, staffMe, staffLogout } from '../lib/adminDb'
+import { can } from '../lib/permissions'
 import { useAdminPush } from '../hooks/usePush'
 import {
   ShoppingBag, Clock, XCircle,
@@ -436,7 +437,7 @@ function OrderModal({ order, onClose, onStatusChange, onAddTime }) {
         )}
 
         {/* Update status */}
-        <div>
+        {onStatusChange && <div>
           <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Update Status</p>
           <div className="grid grid-cols-2 gap-2">
             {statusOptions.map(s => (
@@ -453,7 +454,7 @@ function OrderModal({ order, onClose, onStatusChange, onAddTime }) {
               </button>
             ))}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   )
@@ -777,6 +778,13 @@ export default function AdminPage() {
   // Subscribe for push after login — works for both admin and staff roles
   useAdminPush(!!currentUser)
   const [activeTab,      setActiveTab]      = useState('orders')
+  // Someone who can't see orders (e.g. a menu editor) starts on their first tab.
+  useEffect(() => {
+    if (!currentUser || can(currentUser, 'online_orders', 'online_orders_manage', 'delivery', 'reports')) return
+    const first = [['reviews', 'reviews'], ['menu', 'menu'], ['promos', 'promos'], ['branches', 'branches'], ['staff', 'staff_assign']]
+      .find(([, p]) => can(currentUser, p))
+    if (first) setActiveTab(first[0])
+  }, [currentUser])
   const [orders,         setOrders]         = useState([])
   const [loading,        setLoading]        = useState(true)
   const [selectedDate,   setSelectedDate]   = useState(() => new Date().toISOString().split('T')[0])
@@ -822,7 +830,10 @@ export default function AdminPage() {
   const [newLocation,   setNewLocation]   = useState('')
   const [newSmsPhone,   setNewSmsPhone]   = useState('')
 
-  const isAdmin = currentUser?.role === 'admin'
+  // What this person may do comes from their roles (managed in POS → Roles).
+  const isAdmin = !!currentUser?.isAdmin
+  const may = (...p) => can(currentUser, ...p)
+  const canOrders = may('online_orders', 'online_orders_manage', 'delivery', 'reports')
 
   // Export state
   const [exportOpen,    setExportOpen]    = useState(false)
@@ -899,13 +910,13 @@ export default function AdminPage() {
   }, [currentUser])
 
   // Staff and delivery can only see today (GMT). Admin sees the selected date.
-  const isStaffOrDelivery = currentUser?.role === 'staff' || currentUser?.role === 'delivery'
+  const isStaffOrDelivery = !can(currentUser, 'reports')   // without Reports: today only
   const todayGMT = new Date().toISOString().split('T')[0]
   const activeDate = isStaffOrDelivery ? todayGMT : selectedDate
 
   const fetchOrders = useCallback(async () => {
     setRefreshing(true)
-    const date  = (currentUser?.role === 'staff' || currentUser?.role === 'delivery')
+    const date  = !can(currentUser, 'reports')
       ? new Date().toISOString().split('T')[0]
       : selectedDate
     const start = `${date}T00:00:00Z`
@@ -965,7 +976,10 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => {
-    if (currentUser) { fetchOrders(); fetchReviews() }
+    if (currentUser) {
+      if (can(currentUser, 'online_orders', 'online_orders_manage', 'delivery', 'reports')) fetchOrders()
+      if (can(currentUser, 'reviews')) fetchReviews()
+    }
   }, [currentUser, fetchOrders, fetchReviews])
 
   useEffect(() => {
@@ -1003,8 +1017,8 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => {
-    if (currentUser && activeTab === 'promos' && isAdmin) fetchPromos()
-  }, [currentUser, activeTab, isAdmin, fetchPromos])
+    if (currentUser && activeTab === 'promos' && can(currentUser, 'promos')) fetchPromos()
+  }, [currentUser, activeTab, fetchPromos])
 
   async function handlePromoToggle(id, current) {
     await adminDb.from('promos').update({ active: !current }).eq('id', id)
@@ -1145,9 +1159,7 @@ export default function AdminPage() {
     setStaffLoading(false)
   }, [])
 
-  useEffect(() => {
-    if (currentUser && activeTab === 'staff' && isAdmin) fetchStaff()
-  }, [currentUser, activeTab, isAdmin, fetchStaff])
+  // (Staff are managed in POS → Staff now; the old staff list isn't loaded here.)
 
   async function handleStaffSave(form) {
     setStaffSaving(true)
@@ -1270,7 +1282,7 @@ export default function AdminPage() {
           <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full
             ${isAdmin ? 'bg-brand-orange/10 text-brand-orange' : 'bg-blue-50 text-blue-600'}`}>
             {isAdmin ? <ShieldCheck size={11} /> : <Users size={11} />}
-            {isAdmin ? `Admin · ${currentUser.name}` : `Staff · ${currentUser.name}`}
+            {`${(currentUser.roleNames || []).join(' + ') || 'Staff'} · ${currentUser.name}`}
           </span>
         </div>
 
@@ -1278,12 +1290,13 @@ export default function AdminPage() {
         <div className="max-w-lg mx-auto px-4 pt-2 flex gap-2 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('orders')}
+            hidden={!canOrders}
             className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
               ${activeTab === 'orders' ? 'bg-brand-dark text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
           >
             <ShoppingBag size={15} /> Orders
           </button>
-          {isAdmin && (
+          {may('reviews') && (
             <button
               onClick={() => setActiveTab('reviews')}
               className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
@@ -1297,7 +1310,7 @@ export default function AdminPage() {
               )}
             </button>
           )}
-          {isAdmin && (
+          {may('menu') && (
             <button
               onClick={() => setActiveTab('menu')}
               className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
@@ -1306,7 +1319,7 @@ export default function AdminPage() {
               <UtensilsCrossed size={15} /> Menu
             </button>
           )}
-          {isAdmin && (
+          {may('staff_assign') && (
             <button
               onClick={() => setActiveTab('staff')}
               className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
@@ -1315,7 +1328,7 @@ export default function AdminPage() {
               <Users size={15} /> Staff
             </button>
           )}
-          {isAdmin && (
+          {may('promos') && (
             <button
               onClick={() => setActiveTab('promos')}
               className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
@@ -1324,7 +1337,7 @@ export default function AdminPage() {
               <Tag size={15} className="text-yellow-400" /> Promos
             </button>
           )}
-          {isAdmin && (
+          {may('branches') && (
             <button
               onClick={() => setActiveTab('branches')}
               className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-colors
@@ -1338,7 +1351,7 @@ export default function AdminPage() {
         <div className="max-w-lg mx-auto px-4 py-5 space-y-5">
 
           {/* ── REVIEWS TAB ─────────────────────────────────── */}
-          {activeTab === 'reviews' && isAdmin && (
+          {activeTab === 'reviews' && may('reviews') && (
             <div className="space-y-3">
               {reviewsLoading ? (
                 [...Array(3)].map((_, i) => (
@@ -1429,8 +1442,8 @@ export default function AdminPage() {
                 )}
               </>
             )}
-            {/* Export button — admin only */}
-            {isAdmin && (
+            {/* Export button — needs Download data */}
+            {may('export') && (
               <div className="relative flex-shrink-0" ref={exportRef}>
                 <button
                   onClick={() => setExportOpen(o => !o)}
@@ -1653,7 +1666,7 @@ export default function AdminPage() {
           </> /* end orders tab */}
 
           {/* ── MENU TAB ────────────────────────────────────── */}
-          {activeTab === 'menu' && isAdmin && (
+          {activeTab === 'menu' && may('menu') && (
             <div className="space-y-4">
 
               {/* Branch filter + Add button */}
@@ -1819,112 +1832,23 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* ── STAFF TAB ────────────────────────────────────── */}
-          {activeTab === 'staff' && isAdmin && (
-            <div className="space-y-4">
-
-              {/* Header row */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <p className="text-xs text-gray-400 font-semibold">{staffList.length} staff member{staffList.length !== 1 ? 's' : ''}</p>
-                  <button onClick={fetchStaff} className={`w-7 h-7 rounded-lg bg-brand-muted flex items-center justify-center ${staffLoading ? 'animate-spin' : ''}`}>
-                    <RefreshCw size={13} className="text-brand-dark" />
-                  </button>
-                </div>
-                <button
-                  onClick={() => setStaffForm({ name: '', username: '', pin: '', role: 'staff', is_active: true, branch_id: '' })}
-                  className="flex items-center gap-1.5 bg-brand-brown text-white font-bold text-sm px-4 py-2 rounded-xl active:bg-brand-dark"
-                >
-                  <Plus size={15} /> Add Staff
-                </button>
-              </div>
-
-              {/* Error banner */}
-              {staffError && (
-                <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-sm text-red-600 font-semibold">
-                  ⚠️ {staffError}
-                  <p className="text-xs font-normal mt-1 text-red-400">Make sure the staff table SQL has been run in Supabase.</p>
-                </div>
-              )}
-
-              {/* Staff list */}
-              {staffLoading ? (
-                <div className="space-y-3">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="bg-white rounded-2xl h-16 animate-pulse" />
-                  ))}
-                </div>
-              ) : staffList.length === 0 ? (
-                <div className="text-center py-16">
-                  <Users size={40} className="text-gray-200 mx-auto mb-3" />
-                  <p className="text-gray-400 font-semibold">No staff accounts yet</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {staffList.map(member => (
-                    <div key={member.id} className="bg-white rounded-2xl p-4 border border-brand-muted shadow-sm">
-                      <div className="flex items-center gap-3">
-                        {/* Avatar */}
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-extrabold text-sm
-                          ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : member.role === 'delivery' ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
-                          {member.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-bold text-brand-dark text-sm">{member.name}</p>
-                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full
-                              ${member.role === 'admin' ? 'bg-orange-100 text-brand-orange' : member.role === 'delivery' ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
-                              {member.role === 'admin' ? '🛡 Admin' : member.role === 'delivery' ? '🛵 Delivery' : '👨‍🍳 Staff'}
-                            </span>
-                            {!member.is_active && (
-                              <span className="text-[10px] font-bold bg-red-50 text-red-400 px-2 py-0.5 rounded-full">Disabled</span>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-400">
-                            @{member.username}
-                            {member.branches?.name && (
-                              <> · <span className="text-brand-orange">{member.branches.name.replace('UGs Kitchen — ', '')}</span></>
-                            )}
-                          </p>
-                        </div>
-                        {/* Inline actions */}
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <button
-                            onClick={() => handleStaffToggle(member)}
-                            title={member.is_active ? 'Disable account' : 'Enable account'}
-                            className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center active:bg-gray-200"
-                          >
-                            {member.is_active
-                              ? <ShieldCheck size={15} className="text-green-500" />
-                              : <ShieldOff   size={15} className="text-gray-400" />
-                            }
-                          </button>
-                          <button
-                            onClick={() => setStaffForm({ ...member, pin: '', branch_id: member.branch_id ?? '' })}
-                            title="Edit"
-                            className="w-8 h-8 rounded-lg bg-brand-muted flex items-center justify-center active:bg-gray-200"
-                          >
-                            <Pencil size={14} className="text-gray-500" />
-                          </button>
-                          <button
-                            onClick={() => handleStaffDelete(member.id)}
-                            title="Delete"
-                            className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center active:bg-red-100"
-                          >
-                            <Trash2 size={14} className="text-red-400" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
+          {/* ── STAFF TAB ── people, roles and PINs live in the POS ── */}
+          {activeTab === 'staff' && may('staff_assign') && (
+            <div className="bg-white rounded-2xl p-5 shadow-sm space-y-3">
+              <p className="font-extrabold text-brand-dark">Staff, roles and PINs are managed in the POS</p>
+              <p className="text-sm text-gray-500">
+                Everyone has one login (username + PIN) for both the POS and this page. Add people, give them roles and set PINs in
+                POS → Staff. The owner edits what each role can do in POS → Roles.
+              </p>
+              <a href={`${process.env.NEXT_PUBLIC_POS_URL || 'https://pos.ugskitchen.com'}/manager/staff`}
+                className="inline-flex items-center gap-2 bg-brand-orange text-white font-bold rounded-xl px-4 py-2.5 text-sm">
+                <Users size={15} /> Open POS → Staff
+              </a>
             </div>
           )}
 
           {/* ── PROMOS TAB ───────────────────────────────────── */}
-          {activeTab === 'promos' && isAdmin && (
+          {activeTab === 'promos' && may('promos') && (
             <div className="space-y-4">
 
               {/* Add / Edit promo form */}
@@ -2123,7 +2047,7 @@ export default function AdminPage() {
           )}
 
           {/* ── BRANCHES TAB ─────────────────────────────────── */}
-          {activeTab === 'branches' && isAdmin && (
+          {activeTab === 'branches' && may('branches') && (
             <div className="space-y-4">
 
               {branchForm ? (
@@ -2362,8 +2286,8 @@ export default function AdminPage() {
       <OrderModal
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
-        onStatusChange={handleStatusChange}
-        onAddTime={handleAddTime}
+        onStatusChange={may('online_orders_manage') ? handleStatusChange : null}
+        onAddTime={may('online_orders_manage') ? handleAddTime : null}
       />
 
       {menuForm && (
