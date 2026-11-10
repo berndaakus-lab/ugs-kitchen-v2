@@ -1832,20 +1832,8 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* ── STAFF TAB ── people, roles and PINs live in the POS ── */}
-          {activeTab === 'staff' && may('staff_assign') && (
-            <div className="bg-white rounded-2xl p-5 shadow-sm space-y-3">
-              <p className="font-extrabold text-brand-dark">Staff, roles and PINs are managed in the POS</p>
-              <p className="text-sm text-gray-500">
-                Everyone has one login (username + PIN) for both the POS and this page. Add people, give them roles and set PINs in
-                POS → Staff. The owner edits what each role can do in POS → Roles.
-              </p>
-              <a href={`${process.env.NEXT_PUBLIC_POS_URL || 'https://pos.ugskitchen.com'}/manager/staff`}
-                className="inline-flex items-center gap-2 bg-brand-orange text-white font-bold rounded-xl px-4 py-2.5 text-sm">
-                <Users size={15} /> Open POS → Staff
-              </a>
-            </div>
-          )}
+          {/* ── STAFF TAB ── list + remove here; roles and PINs in the POS ── */}
+          {activeTab === 'staff' && may('staff_assign') && <WebStaffTab />}
 
           {/* ── PROMOS TAB ───────────────────────────────────── */}
           {activeTab === 'promos' && may('promos') && (
@@ -2311,5 +2299,83 @@ export default function AdminPage() {
         />
       )}
     </>
+  )
+}
+
+// ── Staff tab: everyone you may manage, with Remove. Roles and PINs are set
+// in POS → Staff (one login for both apps). Removing someone with history
+// switches them off instead of deleting, so past records keep their name.
+function WebStaffTab() {
+  const [staff, setStaff] = useState(null)
+  const [showRemoved, setShowRemoved] = useState(false)
+  const [busy, setBusy] = useState(null)
+  const [error, setError] = useState('')
+  const posUrl = process.env.NEXT_PUBLIC_POS_URL || 'https://pos.ugskitchen.com'
+
+  const load = useCallback(async () => {
+    const res = await fetch('/api/admin/staff')
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) { setError(body.message || 'Could not load staff.'); return }
+    setStaff(body.staff)
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  async function remove(person) {
+    if (!confirm(`Remove ${person.name}? They will no longer be able to sign in.`)) return
+    setBusy(person.id); setError('')
+    const res = await fetch('/api/admin/staff', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'remove', staff_id: person.id }),
+    })
+    const body = await res.json().catch(() => ({}))
+    setBusy(null)
+    if (!res.ok) { setError(body.message || 'Could not remove them.'); return }
+    if (body.removed === 'disabled') {
+      alert(`${person.name} has sales or deliveries on record, so they were switched off and hidden instead of deleted. They can be restored in POS → Staff.`)
+    }
+    load()
+  }
+
+  const removedCount = (staff || []).filter(s => !s.is_active).length
+  const shown = (staff || []).filter(s => showRemoved || s.is_active)
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-wrap items-center gap-3">
+        <p className="text-sm text-gray-500 flex-1 min-w-[200px]">
+          One login (username + PIN) for the POS and this page. Add people, give roles and set PINs in POS → Staff.
+        </p>
+        <a href={`${posUrl}/manager/staff`} className="inline-flex items-center gap-2 bg-brand-orange text-white font-bold rounded-xl px-4 py-2.5 text-sm">
+          <Users size={15} /> Add / edit in POS
+        </a>
+      </div>
+      {removedCount > 0 && (
+        <label className="flex items-center gap-2 text-xs font-semibold text-gray-500">
+          <input type="checkbox" checked={showRemoved} onChange={e => setShowRemoved(e.target.checked)} /> Show removed ({removedCount})
+        </label>
+      )}
+      {error && <p className="text-red-500 text-sm font-semibold bg-red-50 rounded-xl px-4 py-3">{error}</p>}
+      {!staff && !error && <p className="text-center text-sm text-gray-400 py-6">Loading…</p>}
+      <div className="space-y-2">
+        {shown.map(s => (
+          <div key={s.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-brand-dark truncate">{s.name} <span className="text-xs font-normal text-gray-400">@{s.username}</span></p>
+              <p className="text-xs text-gray-500">
+                {s.roles.length ? s.roles.join(' + ') : 'No login yet'}{s.branch ? ` · ${s.branch}` : ''}
+                {!s.is_active && <span className="text-red-500 font-semibold"> · removed</span>}
+              </p>
+            </div>
+            {s.can_remove && (
+              <button onClick={() => remove(s)} disabled={busy === s.id}
+                className="w-9 h-9 rounded-xl bg-red-50 text-red-500 flex items-center justify-center disabled:opacity-50" aria-label={`Remove ${s.name}`}>
+                <Trash2 size={15} />
+              </button>
+            )}
+          </div>
+        ))}
+        {staff && !shown.length && <p className="text-center text-sm text-gray-400 py-6">No staff yet.</p>}
+      </div>
+    </div>
   )
 }

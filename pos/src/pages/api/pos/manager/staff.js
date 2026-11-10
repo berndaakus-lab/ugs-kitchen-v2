@@ -66,6 +66,29 @@ export default withAuth(async (req, res) => {
     return res.status(200).json({ person })
   }
 
+  // Remove a person. Someone with no history (never sold, served, sent,
+  // received or logged anything) is deleted. Anyone with history is switched
+  // off and hidden instead, so past sales, shifts and deliveries keep their name.
+  if (b.action === 'remove') {
+    const { staff_id } = b
+    if (staff_id === me.staff_id) return res.status(400).json({ message: 'You cannot remove yourself.' })
+    const { data: person } = await db.from('staff').select('id, name, branch_id').eq('id', staff_id).maybeSingle()
+    if (!person || (!me.scopeAll && person.branch_id !== me.branch_id)) return res.status(404).json({ message: 'Staff member not found at this branch.' })
+    const { data: login } = await db.from('pos_staff').select('id, pos_role, pos_roles').eq('staff_id', staff_id).maybeSingle()
+    if (login && !canTouch(login.pos_roles || [login.pos_role])) return res.status(403).json({ message: 'This person has a role you cannot change.' })
+
+    const { error: delErr } = await db.from('staff').delete().eq('id', staff_id)
+    let removed = 'deleted'
+    if (delErr) {
+      if (delErr.code !== '23503') throw delErr   // 23503 = still referenced by their history
+      await db.from('staff').update({ is_active: false }).eq('id', staff_id)
+      if (login) await db.from('pos_staff').update({ is_active: false }).eq('id', login.id)
+      removed = 'disabled'
+    }
+    await db.from('pos_audit_log').insert({ actor_id: me.sid, action: 'staff_remove', meta: { staff_id, name: person.name, removed } })
+    return res.status(200).json({ removed })
+  }
+
   // Set roles / PIN / on-off
   const { staff_id, pin, is_active = true } = b
   const requested = [...new Set(Array.isArray(b.roles) ? b.roles : [])]
@@ -89,7 +112,9 @@ export default withAuth(async (req, res) => {
     p_branch:   branch || null,
     p_active:   Boolean(is_active),
   })
-  if (branch && branch !== person.branch_id) await db.from('staff').update({ branch_id: branch }).eq('id', staff_id)
+  // Keep the person record in step: branch, and on/off (turning the login back
+  // on also brings back someone who was removed).
+  await db.from('staff').update({ branch_id: branch || person.branch_id, is_active: Boolean(is_active) }).eq('id', staff_id)
   await db.from('pos_audit_log').insert({
     actor_id: me.sid, action: 'staff_update',
     meta: { pos_staff_id: id, roles: requested, is_active: Boolean(is_active), pin_changed: Boolean(pin), branch_id: branch || null },

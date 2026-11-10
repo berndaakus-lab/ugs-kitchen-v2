@@ -15,6 +15,7 @@ export default function StaffPage() {
   const [editing, setEditing] = useState(null)
   const [adding, setAdding] = useState(false)
   const [q, setQ] = useState('')
+  const [showRemoved, setShowRemoved] = useState(false)
   const [error, setError] = useState('')
 
   const load = useCallback(() => api('manager/staff').then(setData).catch(e => setError(e.message)), [])
@@ -22,7 +23,8 @@ export default function StaffPage() {
 
   const roleName = useMemo(() => Object.fromEntries((data?.roles || []).map(r => [r.key, r.name])), [data])
   const branchName = useMemo(() => Object.fromEntries((data?.branches || []).map(b => [b.id, b.name])), [data])
-  const shown = (data?.staff || []).filter(s => !q.trim() || `${s.name} ${s.username}`.toLowerCase().includes(q.trim().toLowerCase()))
+  const removedCount = (data?.staff || []).filter(s => !s.is_active).length
+  const shown = (data?.staff || []).filter(s => (showRemoved || s.is_active) && (!q.trim() || `${s.name} ${s.username}`.toLowerCase().includes(q.trim().toLowerCase())))
 
   return (
     <Layout me={me}>
@@ -36,6 +38,11 @@ export default function StaffPage() {
           One login per person, for the POS and the website staff pages. You can give: {(data?.assignable || []).map(k => roleName[k]).join(', ') || '—'}.
         </p>
         <ErrorText>{error}</ErrorText>
+        {removedCount > 0 && (
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" checked={showRemoved} onChange={e => setShowRemoved(e.target.checked)} /> Show removed people ({removedCount})
+          </label>
+        )}
         {data && data.staff.length > 8 && <input className="input" placeholder="Search people" value={q} onChange={e => setQ(e.target.value)} />}
         <div className="card divide-y p-0">
           {shown.map(s => (
@@ -49,9 +56,10 @@ export default function StaffPage() {
                         {!s.pos.is_active && ' · disabled'}
                         {s.pos.locked_until && new Date(s.pos.locked_until) > new Date() && ' · locked (wrong PINs)'}</>
                     : 'No login yet'}
+                  {!s.is_active && <span className="ml-1 font-semibold text-red-600">· removed</span>}
                 </div>
               </div>
-              {s.editable && <button className="btn-ghost px-3 py-2 text-sm" onClick={() => setEditing(s)}>{s.pos ? 'Edit' : 'Give access'}</button>}
+              {s.editable && <button className="btn-ghost px-3 py-2 text-sm" onClick={() => setEditing(s)}>{!s.is_active ? 'Restore' : s.pos ? 'Edit' : 'Give access'}</button>}
             </div>
           ))}
           {data && !shown.length && <div className="p-6 text-center text-gray-400">No staff here yet.</div>}
@@ -122,6 +130,18 @@ function EditStaff({ person, data, onClose, onSaved }) {
   const toggle = k => setPicked(p => (p.includes(k) ? p.filter(x => x !== k) : [...p, k]))
   const SCOPE = { all: 'All branches', branch: 'One branch', kitchen: 'Kitchen' }
 
+  async function remove() {
+    if (!confirm(`Remove ${person.name}? They can no longer sign in. If they have sales or deliveries on record, those keep their name.`)) return
+    setBusy(true); setError('')
+    try {
+      const { removed } = await api('manager/staff', { method: 'POST', body: { action: 'remove', staff_id: person.id } })
+      if (removed === 'disabled') alert(`${person.name} has history, so they were switched off and hidden instead of deleted. Tick "Show removed people" to restore them.`)
+      onSaved()
+    } catch (err) {
+      setError(err.message); setBusy(false)
+    }
+  }
+
   async function save(e) {
     e.preventDefault()
     setBusy(true); setError('')
@@ -163,6 +183,9 @@ function EditStaff({ person, data, onClose, onSaved }) {
         )}
         <ErrorText>{error}</ErrorText>
         <button className="btn-primary w-full" disabled={busy || !picked.length || (!person.pos && pin.length < 4)}>{busy ? 'Saving…' : 'Save'}</button>
+        {person.is_active !== false && (
+          <button type="button" className="w-full py-2 text-sm font-semibold text-red-600" onClick={remove} disabled={busy}>Remove {person.name}</button>
+        )}
       </form>
     </Modal>
   )
