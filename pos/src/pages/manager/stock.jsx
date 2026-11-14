@@ -114,7 +114,7 @@ export default function StockSetup() {
           </>
         )}
       </div>
-      {editingItem && <ItemModal item={editingItem} units={data.units} onClose={() => setEditingItem(null)} onSaved={() => { setEditingItem(null); load() }} />}
+      {editingItem && <ItemModal item={editingItem} units={data.units} showCost={data.show_cost} onClose={() => setEditingItem(null)} onSaved={() => { setEditingItem(null); load() }} />}
       {editingDish && (
         <LinksModal dish={editingDish} dishes={data.dishes} items={data.items.filter(i => i.is_active)} units={data.units} isAdmin={me.user.scopeAll}
           onClose={() => { setEditingDish(null); load() }}
@@ -124,8 +124,8 @@ export default function StockSetup() {
   )
 }
 
-function ItemModal({ item, units, onClose, onSaved }) {
-  const [f, setF] = useState({ unit: 'plate', low_level: 5, is_active: true, ...item, batch_yield: item.batch_yield ?? '', batch_label: item.batch_label ?? '' })
+function ItemModal({ item, units, showCost, onClose, onSaved }) {
+  const [f, setF] = useState({ unit: 'plate', low_level: 5, is_active: true, kind: 'cooked', ...item, unit_cost: item.unit_cost ?? '', batch_yield: item.batch_yield ?? '', batch_label: item.batch_label ?? '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const set = patch => setF(v => ({ ...v, ...patch }))
@@ -145,6 +145,11 @@ function ItemModal({ item, units, onClose, onSaved }) {
     <Modal title={item.id ? `Edit ${item.name}` : 'New stock item'} onClose={onClose}>
       <form onSubmit={save} className="space-y-3">
         <input className="input py-2" placeholder="Name, e.g. Jollof rice" value={f.name || ''} onChange={e => set({ name: e.target.value })} autoFocus />
+        <div className="flex flex-wrap gap-2">
+          {[['raw', 'Raw ingredient'], ['prepared', 'Prepared item'], ['cooked', 'Cooked food']].map(([k, l]) => (
+            <button type="button" key={k} onClick={() => set({ kind: k })} className={`rounded-xl border px-3 py-2 text-sm ${f.kind === k ? 'bg-brand-dark text-white' : ''}`}>{l}</button>
+          ))}
+        </div>
         <label className="block text-sm font-semibold">Counted in</label>
         <select className="input py-2" value={f.unit} onChange={e => set({ unit: e.target.value })}>
           {units.map(u => <option key={u} value={u}>{u}s</option>)}
@@ -154,6 +159,11 @@ function ItemModal({ item, units, onClose, onSaved }) {
           <input className="input py-2" placeholder="e.g. 5 kg bag of rice" value={f.batch_label} onChange={e => set({ batch_label: e.target.value })} />
           <input className="input w-28 py-2" type="number" min="0" step="0.5" placeholder={`${f.unit}s`} value={f.batch_yield} onChange={e => set({ batch_yield: e.target.value })} />
         </div>
+        {showCost && (
+          <label className="block text-sm font-semibold">Cost per {f.unit} (GH₵) <span className="font-normal text-gray-500">— purchases and recipes keep it up to date</span>
+            <input className="input mt-1 py-2" type="number" min="0" step="any" inputMode="decimal" value={f.unit_cost} onChange={e => set({ unit_cost: e.target.value })} />
+          </label>
+        )}
         <label className="block text-sm font-semibold">Warn when at or below</label>
         <input className="input py-2" type="number" min="0" step="1" value={f.low_level} onChange={e => set({ low_level: e.target.value })} />
         {item.id && (

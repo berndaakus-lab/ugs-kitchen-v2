@@ -25,6 +25,39 @@ Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares 
 - **Promo consent:** a separate tick box, off by default. The consent date is stored. **Customers** (manager/admin) exports only customers who agreed, as a CSV file.
 - **Review SMS:** as soon as a sale is paid (cash, or MoMo once confirmed), the customer gets one thank-you SMS. It has a review link to `/review` on this app, valid for 24 hours. Reviews are saved in the same `reviews` table as online reviews.
 
+## Warehouse, kitchens, recipes & alerts (Module 3)
+
+```
+Warehouse ──raw──▶ Central kitchen ──prepared──▶ Satellite kitchens ──cooked──▶ their branches
+     └──────────────────raw─────────────────────────▲
+```
+
+- **Kitchens** (`/manager/locations`, Admin):
+  - rename the warehouse and the central kitchen
+  - add satellite kitchens
+  - pick which satellite supplies each branch
+  - set the phones that get low-stock SMS for each place
+- **Staff:** a Kitchen head or Warehouse person is tied to their kitchen or the warehouse (POS → Staff → "Works at"). The General manager and the Admin pick any place on the screen.
+- **Kitchen / Warehouse screen** (`/store`; the menu says "Kitchen" or "Warehouse"):
+  - **Incoming:** confirm deliveries, changing anything that arrived short.
+  - **Make food** (kitchens): pick a recipe and the number of batches. The ingredients come off stock, the food made goes on, and its cost is updated.
+  - **Send:** only along the allowed routes, which are:
+    - warehouse → central kitchen or satellites
+    - central kitchen → satellites
+    - satellite → its own branches
+
+    Stock comes off the sender straight away and goes on at the receiver when they confirm.
+  - **Purchases** (warehouse): supplier, quantities and price per unit. Stock goes up, and each item's cost becomes the weighted average.
+  - **Stock:** what is there now, counts, waste and corrections.
+- **Recipes** (`/manager/recipes`): what one batch makes and uses. Central kitchen: raw → prepared. Satellites: prepared + raw → cooked. Fractions are fine.
+- **Food cost** (`/manager/costs`): for each dish at the branch, what one plate uses (the Setup links) × the item costs, against the price. Above 35% shows in red. CSV export needs Download data.
+- **Stock items** (Setup) have a type (raw / prepared / cooked) and a cost per unit.
+- **Low-stock alerts:** when anything drops to or below its level, one alert is raised. It clears itself when stock comes back.
+  - The 🔔 in the header shows how many are open.
+  - SMS go to the place's alert phones and to `ALERT_PHONES` / `OWNER_PHONES` (POS env, comma-separated), right after POS sales and stock actions.
+  - A daily summary goes out at 20:00 (`/api/pos/cron/daily`, Vercel Cron). It needs `CRON_SECRET` set in the POS Vercel project.
+- Module 2's single kitchen became the first satellite kitchen. Every branch is supplied by it until reassigned.
+
 ## Roles & permissions
 
 One login per person (username + PIN) for the POS **and** the website's staff pages (`/admin`, `/delivery`).
@@ -85,6 +118,7 @@ One login per person (username + PIN) for the POS **and** the website's staff pa
    7. `../migrations/pos_007_branch_stock.sql`: Module 2, central kitchen and branch stock (see below). It adds a trigger on the online `orders` table so paid orders take stock off. No columns are changed.
    8. `../migrations/pos_008_stock_units.sql`: adds the **scoop** and **can** units (rice by the scoop, corned beef by the tenth of a can).
    9. `../migrations/pos_009_roles.sql` (after `web_001_lockdown.sql`): roles & permissions and duty shifts. **Run it before deploying the matching code.** The old code keeps working on it; the new code needs it.
+   10. `../migrations/pos_010_warehouse_kitchens.sql`: Module 3 (warehouse, kitchens, recipes, purchases, food cost, alerts). Run it before deploying the matching code.
 
    If you ever re-run an earlier migration, re-run the later ones after it, in order.
 

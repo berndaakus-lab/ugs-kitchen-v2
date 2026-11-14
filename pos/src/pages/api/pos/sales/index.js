@@ -2,6 +2,7 @@ import { db, rpc, loadSale, staffNames, today } from '@/lib/supabaseAdmin'
 import { withAuth, can } from '@/lib/session'
 import { broadcast } from '@/lib/broadcast'
 import { parseCustomer, attachCustomer } from '@/lib/customers'
+import { sendPendingAlerts } from '@/lib/alerts'
 import { sendReviewSms } from '@/lib/reviewSms'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -55,6 +56,7 @@ async function createSale(req, res) {
 
   const sale = await loadSale(saleId)
   await broadcast(req.user.branch_id, 'sale_paid', { id: sale.id, ticket_no: sale.ticket_no })
+  await sendPendingAlerts()   // low-stock SMS (Module 3), never throws
   return res.status(200).json({ sale })
 }
 

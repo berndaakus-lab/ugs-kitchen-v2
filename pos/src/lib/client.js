@@ -72,15 +72,21 @@ export const SCREENS = [
   ['/manager',           'Today',     u => can(u, 'reports')],
   ['/cashier',           'Sell',      u => can(u, 'sell')],
   ['/server',            'Serve',     u => can(u, 'serve')],
-  ['/kitchen',           'Kitchen',   u => u.kitchen && can(u, 'stock_send', 'activity')],
+  // Warehouse and kitchens (Module 3): their own place, or any for all-branch people
+  ['/store',             'Kitchen',   u => (u.scopeAll || u.storeRole) && can(u, 'stock_send', 'stock_receive', 'stock_count', 'production', 'purchases', 'activity')],
   // Stock is a branch screen: kitchen-only people (no branch role) use Kitchen instead.
   ['/stock',             'Stock',     u => can(u, 'stock_receive', 'stock_count', 'stock_adjust', 'stock_setup', 'activity') && (u.scopeAll || (u.scopes || []).includes('branch'))],
   ['/shift',             'My shift',  u => u.runsShift || can(u, 'sell', 'serve')],
+  ['/manager/recipes',   'Recipes',   u => can(u, 'recipes')],
+  ['/manager/costs',     'Food cost', u => can(u, 'food_cost')],
   ['/manager/customers', 'Customers', u => can(u, 'customers')],
   ['/manager/staff',     'Staff',     u => can(u, 'staff_assign')],
   ['/manager/roles',     'Roles',     u => can(u, 'roles_manage')],
+  ['/manager/locations', 'Kitchens',  u => can(u, 'locations')],
 ]
-export const screensFor = user => (user ? SCREENS.filter(([, , ok]) => ok(user)) : [])
+// The store screen is named after the person's place: Warehouse for warehouse staff.
+export const screensFor = user => (user ? SCREENS.filter(([, , ok]) => ok(user)).map(([href, label, ok]) =>
+  [href, href === '/store' && !user.scopeAll && (user.scopes || []).includes('warehouse') && !(user.scopes || []).includes('kitchen') ? 'Warehouse' : label, ok]) : [])
 
 // Where a person lands after login: My shift if their role runs on shift and
 // it isn't open yet, otherwise their first screen.

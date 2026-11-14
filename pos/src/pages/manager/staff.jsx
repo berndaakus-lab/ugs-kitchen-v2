@@ -122,13 +122,18 @@ function AddPerson({ data, me, onClose, onAdded }) {
 function EditStaff({ person, data, onClose, onSaved }) {
   const [picked, setPicked] = useState(person.pos?.pos_roles || [])
   const [branch, setBranch] = useState(person.pos?.branch_id ?? person.branch_id ?? null)
+  const [store, setStore] = useState(person.pos?.location_id ?? null)
   const [pin, setPin] = useState('')
   const [active, setActive] = useState(person.pos ? person.pos.is_active : true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const choices = data.roles.filter(r => data.assignable.includes(r.key))
   const toggle = k => setPicked(p => (p.includes(k) ? p.filter(x => x !== k) : [...p, k]))
-  const SCOPE = { all: 'All branches', branch: 'One branch', kitchen: 'Kitchen' }
+  const SCOPE = { all: 'All branches', branch: 'One branch', kitchen: 'A kitchen', warehouse: 'The warehouse' }
+  // Kitchen / warehouse roles work at one place: pick which.
+  const scopes = data.roles.filter(r => picked.includes(r.key)).map(r => r.scope)
+  const storeKinds = [...(scopes.includes('kitchen') ? ['central', 'satellite'] : []), ...(scopes.includes('warehouse') ? ['warehouse'] : [])]
+  const storeChoices = (data.stores || []).filter(l => storeKinds.includes(l.kind))
 
   async function remove() {
     if (!confirm(`Remove ${person.name}? They can no longer sign in. If they have sales or deliveries on record, those keep their name.`)) return
@@ -146,7 +151,7 @@ function EditStaff({ person, data, onClose, onSaved }) {
     e.preventDefault()
     setBusy(true); setError('')
     try {
-      await api('manager/staff', { method: 'POST', body: { staff_id: person.id, roles: picked, pin: pin || undefined, is_active: active, branch_id: branch } })
+      await api('manager/staff', { method: 'POST', body: { staff_id: person.id, roles: picked, pin: pin || undefined, is_active: active, branch_id: branch, location_id: storeKinds.length ? store : null } })
       onSaved()
     } catch (err) {
       setError(err.message); setBusy(false)
@@ -173,6 +178,14 @@ function EditStaff({ person, data, onClose, onSaved }) {
           })}
         </div>
         <BranchSelect data={data} value={branch} onChange={setBranch} />
+        {storeKinds.length > 0 && (
+          <label className="block text-sm font-semibold">Works at
+            <select className="input mt-1 py-2" value={store || ''} onChange={e => setStore(e.target.value || null)}>
+              <option value="">Choose the kitchen / warehouse…</option>
+              {storeChoices.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </label>
+        )}
         <label className="block text-sm font-semibold">{person.pos ? 'New PIN (leave blank to keep)' : 'PIN (4–6 digits)'}</label>
         <input className="input tracking-[0.4em]" type="password" inputMode="numeric" value={pin}
           onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} />
@@ -182,7 +195,7 @@ function EditStaff({ person, data, onClose, onSaved }) {
           </label>
         )}
         <ErrorText>{error}</ErrorText>
-        <button className="btn-primary w-full" disabled={busy || !picked.length || (!person.pos && pin.length < 4)}>{busy ? 'Saving…' : 'Save'}</button>
+        <button className="btn-primary w-full" disabled={busy || !picked.length || (!person.pos && pin.length < 4) || (storeKinds.length > 0 && !store)}>{busy ? 'Saving…' : 'Save'}</button>
         {person.is_active !== false && (
           <button type="button" className="w-full py-2 text-sm font-semibold text-red-600" onClick={remove} disabled={busy}>Remove {person.name}</button>
         )}

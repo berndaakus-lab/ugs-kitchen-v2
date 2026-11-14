@@ -30,4 +30,4 @@ export default withAuth(async (req, res) => {
       expected: Number(l.expected), counted: Number(l.counted), variance: Number(l.variance),
     })),
   })
-}, { perms: ['stock_count'], shift: true })
+}, { perms: ['stock_count'], shift: true, branch: true })

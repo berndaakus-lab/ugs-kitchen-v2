@@ -1,5 +1,6 @@
 import { rpc } from '@/lib/supabaseAdmin'
 import { withAuth } from '@/lib/session'
+import { sendPendingAlerts } from '@/lib/alerts'
 import { broadcast } from '@/lib/broadcast'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -19,5 +20,6 @@ export default withAuth(async (req, res) => {
     p_dispatch: dispatch_id, p_branch: req.user.branch_id, p_lines: clean, p_staff: req.user.sid,
   })
   await broadcast(req.user.branch_id, 'stock_changed', {})
+  await sendPendingAlerts()   // low-stock SMS (Module 3), never throws
   return res.status(200).json({ status })
-}, { perms: ['stock_receive'], shift: true })
+}, { perms: ['stock_receive'], shift: true, branch: true })

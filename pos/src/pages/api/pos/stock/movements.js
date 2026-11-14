@@ -19,4 +19,4 @@ export default withAuth(async (req, res) => {
       ...m, qty: Number(m.qty), name: inv_stock_items?.name, unit: inv_stock_items?.unit, by: names[staff_id] || null,
     })),
   })
-}, { perms: ['activity'] })
+}, { perms: ['activity'], branch: true })

@@ -11,4 +11,4 @@ export default withAuth(async (req, res) => {
     pending: all.filter(d => d.status === 'sent'),
     recent:  all.filter(d => d.status !== 'sent' && new Date(d.received_at).getTime() >= recentCut),
   })
-}, { perms: ['stock_receive'] })
+}, { perms: ['stock_receive'], branch: true })
