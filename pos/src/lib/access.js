@@ -12,7 +12,7 @@ export async function loadRoleDefs(keys) {
 
 export async function loadAccess(posStaffId) {
   const { data: ps } = await db.from('pos_staff')
-    .select('id, staff_id, pos_role, pos_roles, branch_id, is_active, staff:staff_id(name, username, is_active)')
+    .select('*, staff:staff_id(name, username, is_active)')
     .eq('id', posStaffId).maybeSingle()
   if (!ps) return null
   const keys = ps.pos_roles?.length ? ps.pos_roles : [ps.pos_role]
@@ -22,6 +22,8 @@ export async function loadAccess(posStaffId) {
     roles: defs.map(d => d.key),
     role: defs[0]?.key || ps.pos_role,
     homeBranch: ps.branch_id,
+    // Kitchen and warehouse people work at one place (set on POS → Staff).
+    locationId: ps.location_id || null,
     name: ps.staff?.name,
     active: !!(ps.is_active && ps.staff?.is_active),
   }

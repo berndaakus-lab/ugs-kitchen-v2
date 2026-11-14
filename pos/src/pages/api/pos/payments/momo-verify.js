@@ -2,6 +2,7 @@ import { db, rpc, loadSale } from '@/lib/supabaseAdmin'
 import { withAuth } from '@/lib/session'
 import { broadcast } from '@/lib/broadcast'
 import { checkCharge, toPesewas, paystackError, nameFromCharge } from '@/lib/paystack'
+import { sendPendingAlerts } from '@/lib/alerts'
 import { sendReviewSms } from '@/lib/reviewSms'
 
 // Same value as MIN_APPROVAL_SECONDS on the cashier screen.
@@ -50,6 +51,7 @@ export default withAuth(async (req, res) => {
     }
     const paid = await loadSale(sale.id)
     if (flipped) await broadcast(req.user.branch_id, 'sale_paid', { id: paid.id, ticket_no: paid.ticket_no })
+  await sendPendingAlerts()   // low-stock SMS (Module 3), never throws
     return res.status(200).json({ status: 'success', sale: paid })
   }
 

@@ -56,10 +56,16 @@ commit;
 -- commit;
 
 
--- ── STEP 4 (optional, Module 2): reset branch stock to zero ─────
--- Use after testing stock. Clears every delivery, count and stock change, so
--- all branches start at 0. KEEPS the stock items and what each dish uses.
+-- ── STEP 4 (optional, Modules 2–3): reset ALL stock to zero ─────
+-- Use after testing stock. Clears every delivery, count, purchase, batch made,
+-- alert and stock change, so the warehouse, kitchens and branches start at 0.
+-- KEEPS the stock items and their costs, recipes, suppliers, kitchens and
+-- what each dish uses.
 -- begin;
+-- delete from inv_alerts;
+-- delete from inv_productions;
+-- delete from inv_purchase_lines;
+-- delete from inv_purchases;
 -- delete from inv_count_lines;
 -- delete from inv_counts;
 -- delete from inv_dispatch_lines;

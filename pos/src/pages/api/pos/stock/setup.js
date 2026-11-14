@@ -1,6 +1,6 @@
 import { db, rpc } from '@/lib/supabaseAdmin'
-import { withAuth } from '@/lib/session'
-import { UNITS } from '@/lib/stock'
+import { withAuth, can } from '@/lib/session'
+import { UNITS, ITEM_KINDS } from '@/lib/stock'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -22,7 +22,8 @@ export default withAuth(async (req, res) => {
     if (e1 || e2) throw e1 || e2
     return res.status(200).json({
       units: UNITS,
-      items,
+      show_cost: can(req.user, 'food_cost', 'purchases'),
+      items: can(req.user, 'food_cost', 'purchases') ? items : items.map(({ unit_cost, ...i }) => i),
       dishes: menu.map(({ inv_menu_usage, ...m }) => ({
         ...m, links: inv_menu_usage.map(u => ({ stock_item_id: u.stock_item_id, qty: Number(u.qty) })),
       })),
@@ -45,6 +46,14 @@ export default withAuth(async (req, res) => {
       batch_yield: batchYield,
       low_level:   Math.max(0, Number(it.low_level ?? 5) || 0),
       is_active:   it.is_active !== false,
+    }
+    // Module 3: raw ingredient / prepared item / cooked food, and its cost per unit
+    // (purchases and production keep the cost up to date after the first entry).
+    if (ITEM_KINDS.includes(it.kind)) row.kind = it.kind
+    if (it.unit_cost !== undefined && it.unit_cost !== '' && can(req.user, 'food_cost', 'purchases')) {
+      const c = Number(it.unit_cost)
+      if (!(c >= 0)) return res.status(400).json({ message: 'Cost must be 0 or more.' })
+      row.unit_cost = c
     }
     const q = UUID.test(it.id || '')
       ? db.from('inv_stock_items').update(row).eq('id', it.id).select().single()

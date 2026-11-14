@@ -30,11 +30,13 @@ export default withAuth(async (req, res) => {
     const { data: staff, error: e1 } = await staffQ
     if (e1) throw e1
     const { data: logins, error: e2 } = await db.from('pos_staff')
-      .select('id, staff_id, pos_role, pos_roles, is_active, locked_until, branch_id')
+      .select('id, staff_id, pos_role, pos_roles, is_active, locked_until, branch_id, location_id')
       .in('staff_id', staff.map(s => s.id))
     if (e2) throw e2
     const byStaff = Object.fromEntries(logins.map(l => [l.staff_id, { ...l, pos_roles: l.pos_roles || [l.pos_role] }]))
     const { data: branches } = await db.from('branches').select('id, name').eq('is_active', true).order('sort_order')
+    // Kitchens and the warehouse, for people whose roles work there (Module 3).
+    const { data: stores } = await db.from('inv_locations').select('id, name, kind').in('kind', ['warehouse', 'central', 'satellite']).eq('is_active', true).order('sort').order('name')
 
     // Branch-scoped managers also see branchless people they gave a login at this branch.
     const people = staff.map(s => {
@@ -44,6 +46,8 @@ export default withAuth(async (req, res) => {
     return res.status(200).json({
       roles, assignable, branches: me.scopeAll ? branches : branches.filter(b => b.id === me.branch_id),
       can_pick_branch: me.scopeAll, staff: people,
+      // kitchen / warehouse staff are tied to one; others only see their own place
+      stores: me.scopeAll ? (stores || []) : (stores || []).filter(l => l.id === me.locationId),
     })
   }
 
@@ -115,6 +119,13 @@ export default withAuth(async (req, res) => {
   // Keep the person record in step: branch, and on/off (turning the login back
   // on also brings back someone who was removed).
   await db.from('staff').update({ branch_id: branch || person.branch_id, is_active: Boolean(is_active) }).eq('id', staff_id)
+  // Kitchen / warehouse roles work at one place. Someone who doesn't work across
+  // branches can only place people at their own kitchen or warehouse.
+  if (b.location_id !== undefined) {
+    const loc = b.location_id || null
+    if (loc && !me.scopeAll && loc !== me.locationId) return res.status(403).json({ message: 'You can only place people at your own kitchen or warehouse.' })
+    await db.from('pos_staff').update({ location_id: loc }).eq('id', id)
+  }
   await db.from('pos_audit_log').insert({
     actor_id: me.sid, action: 'staff_update',
     meta: { pos_staff_id: id, roles: requested, is_active: Boolean(is_active), pin_changed: Boolean(pin), branch_id: branch || null },

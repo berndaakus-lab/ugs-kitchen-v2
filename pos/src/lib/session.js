@@ -52,7 +52,10 @@ export async function readSession(req) {
 //   withAuth(handler, { perms: ['sell'], shift: true })
 //       … and, if the person runs on shift, a write needs their shift open
 //   withAuth(handler, { all: true })               all-branch people only
-export function withAuth(handler, { perms, shift, all } = {}) {
+//   withAuth(handler, { branch: true })            branch work: needs a branch role (or all-branch)
+//   withAuth(handler, { store: true })             warehouse / kitchen work: needs a kitchen or
+//                                                  warehouse role (or all-branch)
+export function withAuth(handler, { perms, shift, all, branch, store } = {}) {
   return async (req, res) => {
     const session = await readSession(req)
     if (!session) return res.status(401).json({ message: 'Please log in.' })
@@ -64,6 +67,8 @@ export function withAuth(handler, { perms, shift, all } = {}) {
     const user = { ...session, ...access }
     if (perms && !can(user, ...perms)) return res.status(403).json({ message: 'Not allowed for your role.' })
     if (all && !user.scopeAll) return res.status(403).json({ message: 'Not allowed for your role.' })
+    if (branch && !user.scopeAll && !(user.scopes || []).includes('branch')) return res.status(403).json({ message: 'This is for branch staff.' })
+    if (store && !user.scopeAll && !user.storeRole) return res.status(403).json({ message: 'This is for kitchen and warehouse staff.' })
     if (shift && user.runsShift && req.method !== 'GET' && !(await openShiftFor(user.sid))) {
       return res.status(409).json({ message: 'Start your shift first (My shift).', code: 'NO_SHIFT' })
     }
@@ -93,7 +98,14 @@ const DB_MESSAGES = {
   CANNOT_VOID:        [409, 'This sale cannot be voided.'],
   INVALID_PHONE:      [400, 'Enter a valid 10-digit phone number.'],
   NOTHING_TO_SEND:    [400, 'Add at least one item with a quantity.'],
-  DISPATCH_NOT_FOUND: [404, 'Delivery not found for this branch.'],
+  DISPATCH_NOT_FOUND: [404, 'Delivery not found here.'],
+  STEP_NOT_ALLOWED:   [400, 'Food cannot be sent there from here (warehouse → kitchens, central → satellites, satellite → its own branches).'],
+  NOT_A_WAREHOUSE:    [400, 'Purchases are recorded at the warehouse.'],
+  NOT_A_KITCHEN:      [400, 'Food is made at the central kitchen or a satellite kitchen.'],
+  RECIPE_NOT_FOUND:   [404, 'Recipe not found. Refresh the page.'],
+  RECIPE_WRONG_KITCHEN: [400, 'That recipe is for the other kind of kitchen.'],
+  RECIPE_EMPTY:       [400, 'That recipe has no ingredients yet.'],
+  SUPPLIER_NOT_SATELLITE: [400, 'A branch must be supplied by a satellite kitchen.'],
   ALREADY_RECEIVED:   [409, 'This delivery was already confirmed.'],
 }
 
@@ -115,4 +127,10 @@ export function sendDbError(res, err) {
   }
   console.error('[pos]', msg)
   return res.status(500).json({ message: msg || 'Something went wrong.' })
+}
+
+// For routes that check the shift per action: true when the person's role runs
+// on shift and theirs isn't open.
+export async function shiftMissing(user) {
+  return Boolean(user.runsShift && !(await openShiftFor(user.sid)))
 }

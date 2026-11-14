@@ -18,7 +18,14 @@ export const PERMISSION_GROUPS = [
     ['stock_receive', 'Confirm deliveries at the branch'],
     ['stock_count',   'Closing stock count'],
     ['stock_adjust',  'Record waste and corrections'],
-    ['stock_setup',   'Stock items and dish recipes'],
+    ['stock_setup',   'Stock items and dish links'],
+  ] },
+  { label: 'Warehouse & kitchens', perms: [
+    ['purchases',  'Record purchases and suppliers (warehouse)'],
+    ['production', 'Record food cooked / prepared (kitchens)'],
+    ['recipes',    'Edit recipes'],
+    ['food_cost',  'See costs and food cost per dish'],
+    ['locations',  'Set up the warehouse, kitchens and which branches they supply'],
   ] },
   { label: 'Reports', perms: [
     ['reports',  'Sales reports, Today, shift reports'],
@@ -44,7 +51,8 @@ export const PERMISSION_LABEL = Object.fromEntries(PERMISSION_GROUPS.flatMap(g =
 export const SCOPES = [
   ['branch',  'One branch'],
   ['all',     'All branches and the kitchen'],
-  ['kitchen', 'The kitchen'],
+  ['kitchen', 'Their kitchen (central or satellite)'],
+  ['warehouse', 'The warehouse'],
 ]
 
 // Before migrations/pos_009_roles.sql runs, roles are the old fixed ones.
@@ -71,6 +79,9 @@ export function resolveAccess(defs) {
     scopes,
     scopeAll: isAdmin || scopes.includes('all'),
     kitchen: isAdmin || scopes.includes('all') || scopes.includes('kitchen'),
+    warehouse: isAdmin || scopes.includes('all') || scopes.includes('warehouse'),
+    // works at a kitchen or the warehouse (needs a location on POS → Staff)
+    storeRole: scopes.includes('kitchen') || scopes.includes('warehouse'),
     runsShift: defs.some(d => d.runs_shift),
     canAssign: [...new Set(defs.flatMap(d => d.can_assign || []))],
     roleNames: defs.map(d => d.name),

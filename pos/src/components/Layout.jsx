@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { KeyRound, LogOut } from 'lucide-react'
-import { api, roleLabel, screensFor } from '@/lib/client'
+import { Bell, KeyRound, LogOut } from 'lucide-react'
+import { api, can, roleLabel, screensFor } from '@/lib/client'
 
 // People who work across branches (Admin, General manager) switch branch here.
 function BranchSwitcher({ me }) {
@@ -32,6 +32,13 @@ function BranchSwitcher({ me }) {
 export default function Layout({ me, children, right, fill }) {
   const router = useRouter()
   const [changingPin, setChangingPin] = useState(false)
+  // Low-stock alerts for the places this person works at (Module 3).
+  const [lowCount, setLowCount] = useState(0)
+  const watchesStock = me && can(me.user, 'stock_send', 'stock_receive', 'stock_count', 'production', 'purchases', 'activity', 'reports')
+  useEffect(() => {
+    if (!watchesStock) return
+    api('alerts').then(r => setLowCount(r.alerts.length)).catch(() => {})
+  }, [watchesStock, router.pathname])
 
   async function logout() {
     await api('auth/logout', { method: 'POST' }).catch(() => {})
@@ -59,6 +66,12 @@ export default function Layout({ me, children, right, fill }) {
         </nav>
         <div className="ml-auto flex items-center gap-1 sm:gap-3">
           {right}
+          {watchesStock && (
+            <Link href="/alerts" className="relative rounded-lg p-2 hover:bg-white/10" aria-label={`Low stock: ${lowCount}`} title="Low stock">
+              <Bell size={18} />
+              {lowCount > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-brand-orange px-1 text-center text-[11px] font-black leading-[18px]">{lowCount}</span>}
+            </Link>
+          )}
           {me && <span className="hidden text-sm lg:inline">{me.user.name} · <span className="text-white/70">{roleLabel(me.user)}</span></span>}
           {me && (
             <button onClick={() => setChangingPin(true)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Change my PIN" title="Change my PIN">
