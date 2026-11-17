@@ -44,10 +44,14 @@ export default function Stock() {
     <Layout me={me}>
       <div className="mx-auto max-w-4xl space-y-4 p-3 md:p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-black">Stock · {me?.user.branch_name}</h1>
-          {may.setup && (
-            <Link href="/manager/stock" className="btn-ghost ml-auto px-3 py-2 text-sm"><Settings size={16} /> Setup</Link>
-          )}
+          <div>
+            <h1 className="text-2xl font-black">Branch stock · {me?.user.branch_name}</h1>
+            <p className="text-sm text-gray-600">Confirm food that arrived, see what is left, and do the closing count.</p>
+          </div>
+          <div className="ml-auto flex flex-wrap gap-2">
+            {may.setup && <Link href="/manager/stock" className="btn-ghost px-3 py-2 text-sm"><Settings size={16} /> What each dish uses</Link>}
+            {may.setup && <Link href="/manager/items" className="btn-ghost px-3 py-2 text-sm">Stock items</Link>}
+          </div>
         </div>
         <ErrorText>{error}</ErrorText>
 

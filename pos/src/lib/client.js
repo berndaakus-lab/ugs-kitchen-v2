@@ -67,33 +67,87 @@ export function useMe(perms) {
 export { can }
 export const roleLabel = user => (user?.roleNames || []).join(' + ')
 
-// Every screen, in menu order, and who may open it.
-export const SCREENS = [
-  ['/manager',           'Today',     u => can(u, 'reports')],
-  ['/manager/reports',   'Reports',   u => can(u, 'reports')],
-  ['/cashier',           'Sell',      u => can(u, 'sell')],
-  ['/server',            'Serve',     u => can(u, 'serve')],
-  // Warehouse and kitchens (Module 3): their own place, or any for all-branch people
-  ['/store',             'Kitchen',   u => (u.scopeAll || u.storeRole) && can(u, 'stock_send', 'stock_receive', 'stock_count', 'production', 'purchases', 'activity')],
-  // Stock is a branch screen: kitchen-only people (no branch role) use Kitchen instead.
-  ['/stock',             'Stock',     u => can(u, 'stock_receive', 'stock_count', 'stock_adjust', 'stock_setup', 'activity') && (u.scopeAll || (u.scopes || []).includes('branch'))],
-  ['/shift',             'My shift',  u => u.runsShift || can(u, 'sell', 'serve')],
-  ['/manager/recipes',   'Recipes',   u => can(u, 'recipes')],
-  ['/manager/costs',     'Food cost', u => can(u, 'food_cost')],
-  ['/manager/customers', 'Customers', u => can(u, 'customers')],
-  ['/manager/staff',     'Staff',     u => can(u, 'staff_assign')],
-  ['/manager/roles',     'Roles',     u => can(u, 'roles_manage')],
-  ['/manager/locations', 'Kitchens',  u => can(u, 'locations')],
+// ── Menu ─────────────────────────────────────────────────────────
+// The menu is grouped into sections (top bar); each section's pages show as a
+// sub-menu (second bar) and as big buttons on the Start page. A section only
+// shows when the person can open at least one of its pages.
+const has = (u, s) => (u.scopes || []).includes(s)
+const atBranch = u => u.scopeAll || has(u, 'branch')
+const atStore = u => u.scopeAll || u.storeRole
+// The warehouse / kitchen work screen is named after the person's place.
+const storeLabel = u => (u.scopeAll ? 'Warehouse & kitchens' : has(u, 'kitchen') ? 'My kitchen' : has(u, 'warehouse') ? 'Warehouse' : 'Warehouse & kitchens')
+
+export const SECTIONS = [
+  { key: 'home', label: 'Home', pages: [
+    { href: '/home', label: 'Start', desc: 'Everything you can do, in one place', ok: () => true },
+    { href: '/shift', label: 'My shift', desc: 'Start or end your shift and see your report', ok: u => u.runsShift || can(u, 'sell', 'serve') },
+  ] },
+  { key: 'sales', label: 'Sales', pages: [
+    { href: '/cashier', label: 'Sell', desc: 'Take orders and payments at the counter', ok: u => can(u, 'sell') },
+    { href: '/server', label: 'Serve', desc: 'Hand out food against tickets', ok: u => can(u, 'serve') },
+  ] },
+  { key: 'stock', label: 'Stock', pages: [
+    { href: '/stock', label: 'Branch stock', desc: 'Confirm food that arrived, see what is left, closing count',
+      ok: u => atBranch(u) && can(u, 'stock_receive', 'stock_count', 'stock_adjust', 'stock_setup', 'activity') },
+    { href: '/store', label: storeLabel, desc: 'Receive, cook, send on and count at the warehouse or a kitchen',
+      ok: u => atStore(u) && can(u, 'stock_send', 'stock_receive', 'stock_count', 'production', 'purchases', 'activity') },
+    { href: '/alerts', label: 'Low stock', desc: 'Everything running low, by place',
+      ok: u => can(u, 'stock_send', 'stock_receive', 'stock_count', 'production', 'purchases', 'activity', 'reports') },
+  ] },
+  { key: 'items', label: 'Items & recipes', pages: [
+    { href: '/manager/items', label: 'Stock items', desc: 'Add, change or remove ingredients and food you keep in stock',
+      ok: u => can(u, 'stock_setup', 'purchases', 'recipes') },
+    { href: '/manager/stock', label: 'Dish ingredients', desc: 'What one plate of each dish uses (sets "left" and sold out)',
+      ok: u => can(u, 'stock_setup') },
+    { href: '/manager/recipes', label: 'Recipes', desc: 'What a kitchen batch uses and makes', ok: u => can(u, 'recipes', 'production', 'food_cost') },
+    { href: '/manager/suppliers', label: 'Suppliers', desc: 'Who the warehouse buys from', ok: u => can(u, 'purchases') },
+  ] },
+  { key: 'reports', label: 'Reports', pages: [
+    { href: '/manager', label: 'Today', desc: "Today's sales and stock at a glance", ok: u => can(u, 'reports') },
+    { href: '/manager/reports', label: 'Reports', desc: 'Sales, dishes, stock, cash and staff for any dates', ok: u => can(u, 'reports') },
+    { href: '/manager/costs', label: 'Food cost', desc: 'What each plate costs against its price', ok: u => can(u, 'food_cost') },
+    { href: '/manager/customers', label: 'Customers', desc: 'Walk-in customers and the promo list', ok: u => can(u, 'customers') },
+  ] },
+  { key: 'settings', label: 'Settings', pages: [
+    { href: '/manager/staff', label: 'Staff', desc: 'People, their roles and PINs', ok: u => can(u, 'staff_assign') },
+    { href: '/manager/roles', label: 'Roles', desc: 'What each role is allowed to do', ok: u => can(u, 'roles_manage') },
+    { href: '/manager/locations', label: 'Places', desc: 'Branches, kitchens and the warehouse, and who supplies whom', ok: u => can(u, 'locations') },
+  ] },
 ]
-// The store screen is named after the person's place: Warehouse for warehouse staff.
-export const screensFor = user => (user ? SCREENS.filter(([, , ok]) => ok(user)).map(([href, label, ok]) =>
-  [href, href === '/store' && !user.scopeAll && (user.scopes || []).includes('warehouse') && !(user.scopes || []).includes('kitchen') ? 'Warehouse' : label, ok]) : [])
+
+// The sections and pages this person can open (labels resolved).
+export function sectionsFor(user) {
+  if (!user) return []
+  return SECTIONS.map(s => ({
+    ...s,
+    pages: s.pages.filter(p => p.ok(user)).map(p => ({ ...p, label: typeof p.label === 'function' ? p.label(user) : p.label })),
+  })).filter(s => s.pages.length)
+}
+
+// Which section a page belongs to (pages outside the menu, e.g. /alerts or a
+// print page, fall back to the closest parent path).
+export function sectionOf(pathname) {
+  let best = null, len = -1
+  for (const s of SECTIONS) for (const p of s.pages) {
+    if ((pathname === p.href || pathname.startsWith(`${p.href}/`)) && p.href.length > len) { best = s.key; len = p.href.length }
+  }
+  return best
+}
+
+// Flat list [href, label] of every page this person can open (menu order).
+export const screensFor = user => sectionsFor(user).flatMap(s => s.pages.filter(p => p.href !== '/home').map(p => [p.href, p.label]))
 
 // Where a person lands after login: My shift if their role runs on shift and
-// it isn't open yet, otherwise their first screen.
+// it isn't open yet; straight to their page if they only have one kind of
+// work (e.g. a cashier); otherwise the Start page.
 export function homeFor(user, shift) {
   if (user?.runsShift && shift === null) return '/shift'
-  return screensFor(user)[0]?.[0] || '/shift'
+  // Counter staff go straight to their screen; managers start on Start.
+  if (!can(user, 'reports') && can(user, 'sell')) return '/cashier'
+  if (!can(user, 'reports') && can(user, 'serve')) return '/server'
+  const work = sectionsFor(user).filter(s => s.key !== 'home')
+  if (work.length === 1) return work[0].pages[0].href
+  return '/home'
 }
 
 // Payment methods the shop uses (cash + MoMo prompt); others still show in

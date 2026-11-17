@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { Bell, KeyRound, LogOut } from 'lucide-react'
-import { api, can, roleLabel, screensFor } from '@/lib/client'
+import { api, can, roleLabel, sectionsFor, sectionOf } from '@/lib/client'
 
 // People who work across branches (Admin, General manager) switch branch here.
 function BranchSwitcher({ me }) {
@@ -32,6 +32,12 @@ function BranchSwitcher({ me }) {
 export default function Layout({ me, children, right, fill }) {
   const router = useRouter()
   const [changingPin, setChangingPin] = useState(false)
+  const sections = me ? sectionsFor(me.user) : []
+  const current = sectionOf(router.pathname)
+  const subPages = (sections.find(sec => sec.key === current)?.pages) || []
+  // the most specific page that matches (so /manager is not 'on' inside /manager/items)
+  const onHref = subPages.map(pg => pg.href).filter(h => router.pathname === h || router.pathname.startsWith(`${h}/`)).sort((x, y) => y.length - x.length)[0]
+  const isOn = href => href === onHref
   // Low-stock alerts for the places this person works at (Module 3).
   const [lowCount, setLowCount] = useState(0)
   const watchesStock = me && can(me.user, 'stock_send', 'stock_receive', 'stock_count', 'production', 'purchases', 'activity', 'reports')
@@ -53,14 +59,15 @@ export default function Layout({ me, children, right, fill }) {
         {me && (me.user.scopeAll
           ? <BranchSwitcher me={me} />
           : <div className="max-w-[40vw] truncate text-sm text-white/70">{me.user.branch_name}</div>)}
-        <nav className="no-scrollbar order-last -mx-1 flex w-full gap-1 overflow-x-auto md:order-none md:mx-0 md:w-auto">
-          {me && screensFor(me.user).map(([href, label]) => (
+        {/* Sections. Each opens its first page; its pages show in the bar below. */}
+        <nav className="no-scrollbar order-last -mx-1 flex w-full gap-1 overflow-x-auto md:order-none md:mx-0 md:w-auto" aria-label="Menu">
+          {sections.map(sec => (
             <Link
-              key={href}
-              href={href}
-              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold ${router.pathname === href ? 'bg-white/15' : 'hover:bg-white/10'}`}
+              key={sec.key}
+              href={sec.pages[0].href}
+              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold ${sec.key === current ? 'bg-white text-brand-dark' : 'hover:bg-white/10'}`}
             >
-              {label}
+              {sec.label}
             </Link>
           ))}
         </nav>
@@ -81,6 +88,17 @@ export default function Layout({ me, children, right, fill }) {
           <button onClick={logout} className="rounded-lg p-2 hover:bg-white/10" aria-label="Log out" title="Log out"><LogOut size={18} /></button>
         </div>
       </header>
+      {/* Sub-menu: the pages of the current section, always one tap away. */}
+      {subPages.length > 1 && (
+        <nav className="no-scrollbar flex shrink-0 gap-1 overflow-x-auto border-b border-brand-muted bg-white px-2 py-1.5 md:px-4" aria-label="Section">
+          {subPages.map(pg => (
+            <Link key={pg.href} href={pg.href} title={pg.desc}
+              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold ${isOn(pg.href) ? 'bg-brand-dark text-white' : 'text-gray-700 hover:bg-brand-muted'}`}>
+              {pg.label}
+            </Link>
+          ))}
+        </nav>
+      )}
       {me?.user.runsShift && !me.shift && router.pathname !== '/shift' && (
         <Link href="/shift" className="block shrink-0 bg-amber-100 px-4 py-2 text-center text-sm font-semibold text-amber-900">
           You're not on shift. Start your shift →

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/router'
 import { ChefHat, PackageCheck, Plus, Send, ShoppingCart, Trash2 } from 'lucide-react'
+import ItemModal from '@/components/ItemModal'
 import Layout, { ErrorText, Modal } from '@/components/Layout'
 import { api, can, dateTime, ghs, time, useMe } from '@/lib/client'
 
@@ -17,6 +20,7 @@ const PICK_KEY = 'ugs-store-location'
 // Incoming deliveries · food made · sending on · purchases · stock & counts.
 export default function Store() {
   const [me] = useMe(ROLES)
+  const router = useRouter()
   const [picked, setPicked] = useState(null)
   const [data, setData] = useState(null)
   const [tab, setTab] = useState(null)
@@ -38,10 +42,12 @@ export default function Store() {
     if (!me) return
     let saved = null
     try { saved = localStorage.getItem(PICK_KEY) } catch {}
-    const first = me.user.scopeAll ? saved : null
+    // ?location= (from a link or a low-stock alert) wins over the last place picked
+    const first = me.user.scopeAll ? (router.query.location || saved) : null
+    if (router.query.tab) setTab(String(router.query.tab))
     setPicked(first)
     load(first)
-  }, [me, load])
+  }, [me, load]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function pick(id) {
     setPicked(id); setData(null)
@@ -66,13 +72,21 @@ export default function Store() {
     <Layout me={me}>
       <div className="mx-auto max-w-5xl space-y-4 p-3 md:p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-black">{loc ? loc.name : 'Kitchens & warehouse'}</h1>
-          {loc && <span className="rounded-full bg-brand-muted px-2 py-0.5 text-xs font-bold">{loc.kind_label}</span>}
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-black">{loc ? loc.name : 'Warehouse & kitchens'}</h1>
+              {loc && <span className="rounded-full bg-brand-muted px-2 py-0.5 text-xs font-bold">{loc.kind_label}</span>}
+            </div>
+            <p className="text-sm text-gray-600">{loc?.kind === 'warehouse' ? 'Buy stock, send it to the kitchens, and count what is here.' : 'Confirm what arrived, cook, send on, and count what is here.'}</p>
+          </div>
           {data?.stores?.length > 1 && (
             <select className="input ml-auto w-auto py-2 text-base" value={picked || loc?.id || ''} onChange={e => pick(e.target.value)}>
               {!loc && <option value="">Choose…</option>}
               {data.stores.map(s => <option key={s.id} value={s.id}>{s.name} · {s.kind_label}</option>)}
             </select>
+          )}
+          {data?.stores?.length > 1 && (
+            <span className="w-full text-xs text-gray-500 sm:w-auto">Showing one place: pick another from the list.</span>
           )}
         </div>
         <ErrorText>{error || data?.error}</ErrorText>
@@ -89,8 +103,8 @@ export default function Store() {
             </div>
             {tab === 'incoming' && <Incoming data={data} me={me} onDone={reload} />}
             {tab === 'produce' && <Produce data={data} onDone={reload} />}
-            {tab === 'send' && <SendForm data={data} onDone={reload} />}
-            {tab === 'purchase' && <Purchase data={data} onDone={reload} />}
+            {tab === 'send' && <SendForm data={data} me={me} onDone={reload} />}
+            {tab === 'purchase' && <Purchase data={data} me={me} onDone={reload} />}
             {tab === 'stock' && <StockList data={data} me={me} onDone={reload} />}
           </>
         )}
@@ -205,10 +219,13 @@ function Produce({ data, onDone }) {
   }
 
   if (!recipes) return <div className="card text-gray-400">{error || 'Loading recipes…'}</div>
-  if (!recipes.length) return <div className="card text-gray-500">No recipes for a {data.location.kind_label.toLowerCase()} yet. Add them under Recipes.</div>
+  if (!recipes.length) return <div className="card text-gray-500">No recipes for a {data.location.kind_label.toLowerCase()} yet. <Link href="/manager/recipes" className="font-bold text-brand-orange">Add recipes →</Link></div>
   return (
     <form onSubmit={save} className="card space-y-3">
-      <h2 className="flex items-center gap-2 text-lg font-black"><ChefHat size={20} /> Record food made</h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="flex items-center gap-2 text-lg font-black"><ChefHat size={20} /> Record food made</h2>
+        <Link href="/manager/recipes" className="ml-auto text-sm font-semibold text-brand-brown">Recipes →</Link>
+      </div>
       <div className="flex flex-wrap gap-2">
         <select className="input min-w-0 flex-1 py-2 text-base" value={recipeId} onChange={e => setRecipeId(e.target.value)}>
           {recipes.map(r => <option key={r.id} value={r.id}>{byId[r.output_item]?.name} — 1 batch = {fmt(r.yield_qty)} {byId[r.output_item]?.unit}</option>)}
@@ -239,7 +256,7 @@ function Produce({ data, onDone }) {
   )
 }
 
-function ItemLines({ items, lines, setLines, withCost, onHand }) {
+function ItemLines({ items, lines, setLines, withCost, onHand, onNewItem }) {
   const byId = Object.fromEntries(items.map(i => [i.id, i]))
   const unused = items.filter(i => !lines.some(l => l.stock_item_id === i.id))
   const set = (i, patch) => setLines(ls => ls.map((l, n) => (n === i ? { ...l, ...patch } : l)))
@@ -263,6 +280,9 @@ function ItemLines({ items, lines, setLines, withCost, onHand }) {
           </div>
         )
       })}
+      {onNewItem && (
+        <button type="button" className="text-sm font-semibold text-brand-brown" onClick={onNewItem}><Plus size={14} className="inline" /> Item not in the list? Add a new item</button>
+      )}
       {unused.length > 0 && (
         <select className="input py-2 text-base" value="" onChange={e => {
           const it = byId[e.target.value]
@@ -280,9 +300,26 @@ function ItemLines({ items, lines, setLines, withCost, onHand }) {
   )
 }
 
-function SendForm({ data, onDone }) {
+// "Add a new item" without leaving the page: the item is created, the list
+// reloads, and the new item is already on a line.
+function useQuickAdd(me, setLines, onDone) {
+  const [open, setOpen] = useState(false)
+  const allowed = can(me?.user, 'stock_setup', 'purchases', 'recipes')
+  const modal = open && (
+    <ItemModal showCost={can(me?.user, 'food_cost', 'purchases')} defaultKind="raw" onClose={() => setOpen(false)}
+      onSaved={it => {
+        setOpen(false)
+        setLines(ls => [...ls, { stock_item_id: it.id, qty: '', unit_cost: it.unit_cost != null ? String(it.unit_cost) : '' }])
+        onDone()
+      }} />
+  )
+  return { onNewItem: allowed ? () => setOpen(true) : undefined, modal }
+}
+
+function SendForm({ data, me, onDone }) {
   const [to, setTo] = useState(data.destinations[0]?.id || '')
   const [lines, setLines] = useState([])
+  const quick = useQuickAdd(me, setLines, onDone)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
@@ -309,7 +346,7 @@ function SendForm({ data, onDone }) {
             {data.destinations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </div>
-        <ItemLines items={data.stock} lines={lines} setLines={setLines} onHand={onHand} />
+        <ItemLines items={data.stock} lines={lines} setLines={setLines} onHand={onHand} onNewItem={quick.onNewItem} />
         <input className="input" placeholder="Note (optional)" value={note} onChange={e => setNote(e.target.value)} />
         {msg && <p className="text-sm font-semibold text-green-700">{msg}</p>}
         <ErrorText>{error}</ErrorText>
@@ -326,14 +363,16 @@ function SendForm({ data, onDone }) {
           ))}
         </div>
       )}
+      {quick.modal}
     </div>
   )
 }
 
-function Purchase({ data, onDone }) {
+function Purchase({ data, me, onDone }) {
   const [suppliers, setSuppliers] = useState([])
   const [supplier, setSupplier] = useState('')
   const [lines, setLines] = useState([])
+  const quick = useQuickAdd(me, setLines, onDone)
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -364,8 +403,9 @@ function Purchase({ data, onDone }) {
           {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <button type="button" className="text-sm font-semibold text-brand-brown" onClick={() => setAdding(true)}><Plus size={14} className="inline" /> New supplier</button>
+        <Link href="/manager/suppliers" className="ml-auto text-sm font-semibold text-brand-brown">All suppliers →</Link>
       </div>
-      <ItemLines items={data.stock} lines={lines} setLines={setLines} withCost />
+      <ItemLines items={data.stock} lines={lines} setLines={setLines} withCost onNewItem={quick.onNewItem} />
       <div className="text-right text-lg font-black">Total {ghs(total)}</div>
       <input className="input" placeholder="Note, e.g. invoice number (optional)" value={note} onChange={e => setNote(e.target.value)} />
       {msg && <p className="text-sm font-semibold text-green-700">{msg}</p>}
@@ -373,6 +413,7 @@ function Purchase({ data, onDone }) {
       <button className="btn-primary w-full" disabled={busy || !lines.some(l => Number(l.qty) > 0)}>{busy ? 'Saving…' : 'Save purchase'}</button>
     </form>
     {adding && <SupplierModal onClose={() => setAdding(false)} onSaved={s => { setAdding(false); loadSuppliers(); setSupplier(s.id) }} />}
+    {quick.modal}
     </>
   )
 }
@@ -414,6 +455,7 @@ function StockList({ data, me, onDone }) {
     <div className="card space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-black">Stock now</h2>
+        {can(u, 'stock_setup', 'purchases', 'recipes') && <Link href="/manager/items" className="text-sm font-semibold text-brand-brown">Add or change items →</Link>}
         <select className="input w-auto py-1.5 text-sm" value={kind} onChange={e => setKind(e.target.value)}>
           <option value="all">Everything</option><option value="raw">Raw ingredients</option><option value="prepared">Prepared items</option><option value="cooked">Cooked food</option>
         </select>
