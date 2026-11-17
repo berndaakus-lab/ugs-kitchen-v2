@@ -70,6 +70,7 @@ export const roleLabel = user => (user?.roleNames || []).join(' + ')
 // Every screen, in menu order, and who may open it.
 export const SCREENS = [
   ['/manager',           'Today',     u => can(u, 'reports')],
+  ['/manager/reports',   'Reports',   u => can(u, 'reports')],
   ['/cashier',           'Sell',      u => can(u, 'sell')],
   ['/server',            'Serve',     u => can(u, 'serve')],
   // Warehouse and kitchens (Module 3): their own place, or any for all-branch people

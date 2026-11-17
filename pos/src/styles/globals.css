@@ -57,3 +57,20 @@
     font-family: 'Courier New', monospace;
   }
 }
+
+/* ─── Report print / PDF (A4) — Module 4 ─────────────────────
+   The thermal rules above hide everything but #print-root; the report page
+   (body.report-print) shows itself instead and prints on A4 pages. */
+@page report { size: A4; margin: 12mm; }
+@media print {
+  body.report-print { background: #fff; }
+  body.report-print * { visibility: visible; }
+  body.report-print .report-root { page: report; font-size: 11px; }
+  body.report-print .card { box-shadow: none; border: 1px solid #e5ded2; padding: 10px; }
+  body.report-print .report-section + .report-section { break-before: page; }
+  body.report-print .break-inside-avoid { break-inside: avoid; }
+  body.report-print .overflow-x-auto { overflow: visible; }
+  body.report-print .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.report-print .lg\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  body.report-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

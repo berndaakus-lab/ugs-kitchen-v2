@@ -58,6 +58,54 @@ Warehouse ──raw──▶ Central kitchen ──prepared──▶ Satellite k
   - A daily summary goes out at 20:00 (`/api/pos/cron/daily`, Vercel Cron). It needs `CRON_SECRET` set in the POS Vercel project.
 - Module 2's single kitchen became the first satellite kitchen. Every branch is supplied by it until reassigned.
 
+## Reports & owner dashboard (Module 4)
+
+**Reports** (`/manager/reports`) is for anyone whose role has **Sales reports** (`reports`). Walk-in and online sales are always counted together. They come from the `sales_unified` view.
+
+- **Filters:**
+  - **Dates:** Today, Yesterday, This week (from Monday), This month, Last month, or pick dates (up to one year).
+  - **Branch:** All branches or one branch. Only people who work across branches (Admin, General manager) get this choice. Everyone else always sees their own branch, and the server enforces this too.
+  - **Sales:** walk-in and online, walk-in only, or online only.
+  - **Payment:** Cash, MoMo or Card.
+  - **Staff:** one person. Sales are then only the walk-in sales they took, because online orders have no cashier.
+  - The filters are kept in the page address, so a report can be bookmarked or shared with someone who has access.
+- **Tabs:**
+  - **Overview:**
+    - total sales against the previous period of the same length
+    - orders and average order
+    - walk-in vs online
+    - bar charts: sales over time (by day, week or month) and sales by branch
+    - sales by hour, to plan cooking and staff
+    - donuts: walk-in vs online, payment methods, sales by category
+    - **food cost %** of what was sold, only for people with **See costs** (`food_cost`)
+  - **Dishes:**
+    - best and slow sellers
+    - dishes on the menu that **did not sell at all**
+    - every dish with walk-in and online quantities
+    - sales by category
+  - **Stock** (branches):
+    - for each item: sent from the kitchen, received, sold, returned (voids / cancelled orders), wasted, count differences, and what was **left** at the end of the last day
+    - every delivery route (warehouse → kitchens → branches) with deliveries that were short or are not confirmed yet
+    - the short deliveries
+  - **Cash & payments:**
+    - Cash / MoMo / Card totals, split into walk-in and online
+    - every cashier shift with float, expected, counted and the difference
+    - total cash short and over
+  - **Staff:**
+    - sales per cashier (with average, voids, shortages)
+    - tickets and items per server
+    - every void, with who approved it and why
+- **Downloads** need **Download data** (`export`):
+  - **Excel:** one sheet per section, plus every sale.
+  - **PDF / Print:** opens an A4 report with every section and the print dialog. Choose "Save as PDF" to get a PDF.
+- **Business day:** Ghana time is UTC. A sale's day is its business date, and its hour is the Ghana hour.
+- **No database changes:** Module 4 only reads existing tables, so there is no SQL to run.
+- **Code:**
+  - `src/lib/reportData.js` builds the report and pages through Supabase's 1,000-row limit.
+  - `api/pos/reports/dashboard` and `api/pos/reports/export` serve it.
+  - `components/Charts.jsx` has the charts (plain SVG and HTML, no chart library).
+  - `components/ReportSections.jsx` has the tabs, shared by the dashboard and the print page.
+
 ## Roles & permissions
 
 One login per person (username + PIN) for the POS **and** the website's staff pages (`/admin`, `/delivery`).
