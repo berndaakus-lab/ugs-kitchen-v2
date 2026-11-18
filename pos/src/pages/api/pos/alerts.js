@@ -18,7 +18,7 @@ export default withAuth(async (req, res) => {
   if (error) return res.status(200).json({ alerts: [] })   // before pos_010 has run
   return res.status(200).json({
     alerts: data.map(a => ({
-      id: a.id, place: a.inv_locations?.name, kind: a.inv_locations?.kind, item: a.inv_stock_items?.name,
+      id: a.id, location_id: a.location_id, place: a.inv_locations?.name, kind: a.inv_locations?.kind, item: a.inv_stock_items?.name,
       unit: a.inv_stock_items?.unit, on_hand: Number(a.on_hand), level: Number(a.level), since: a.created_at,
     })),
   })

@@ -2,7 +2,7 @@ import { db } from '@/lib/supabaseAdmin'
 import { withAuth } from '@/lib/session'
 import { normalizePhone } from '@/lib/phone'
 
-// GET → suppliers · POST { supplier: {id?, name, phone?, is_active} }
+// GET → suppliers · POST { supplier: {id?, name, phone?, is_active} } · POST { action: 'delete', id }
 export default withAuth(async (req, res) => {
   if (req.method === 'GET') {
     const { data, error } = await db.from('inv_suppliers').select('*').order('name')
@@ -10,6 +10,19 @@ export default withAuth(async (req, res) => {
     return res.status(200).json({ suppliers: data })
   }
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
+  // Delete when never bought from; otherwise archive so past purchases keep the name.
+  if (req.body?.action === 'delete') {
+    const id = req.body.id
+    const { count } = await db.from('inv_purchases').select('id', { count: 'exact', head: true }).eq('supplier_id', id)
+    if (count) {
+      const { error } = await db.from('inv_suppliers').update({ is_active: false }).eq('id', id)
+      if (error) throw error
+      return res.status(200).json({ removed: 'archived' })
+    }
+    const { error } = await db.from('inv_suppliers').delete().eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ removed: 'deleted' })
+  }
   const s = req.body?.supplier || {}
   const name = String(s.name || '').trim().slice(0, 80)
   if (!name) return res.status(400).json({ message: 'Give the supplier a name.' })

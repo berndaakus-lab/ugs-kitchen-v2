@@ -42,10 +42,11 @@ export default function Locations() {
   return (
     <Layout me={me}>
       <div className="mx-auto max-w-4xl space-y-4 p-3 md:p-4">
-        <h1 className="text-2xl font-black">Kitchens & warehouse</h1>
+        <h1 className="text-2xl font-black">Places</h1>
         <p className="text-sm text-gray-600">
-          Warehouse → central kitchen (prepared items) → satellite kitchens (cooked food) → their branches.
-          Raw ingredients can also go straight from the warehouse to a satellite kitchen.
+          Set up the warehouse, the central kitchen and the satellite kitchens, and choose which kitchen supplies each branch.
+          Food goes: warehouse → central kitchen (prepared items) → satellite kitchens (cooked food) → their branches.
+          The daily work happens on Stock → Warehouse & kitchens.
         </p>
         <ErrorText>{error}</ErrorText>
         {saved && <p className="text-sm font-semibold text-green-700">{saved}</p>}

@@ -2,6 +2,23 @@
 
 Walk-in point of sale for UGs Kitchen. It is a separate Next.js app that shares the online ordering app's Supabase database. It never writes to the online app's tables. It only reads `branches`, `staff`, `categories`, `menu_items`, and `orders` (orders are read for the combined sales view).
 
+## Menu (where things are)
+
+The top bar has sections. The pages of the open section show as a second bar under it, and the **Start** page (`/home`) shows the same pages as big buttons, with the day's to-dos on top (start your shift, deliveries to confirm, low stock). People only see what their roles allow; counter staff go straight to Sell / Serve after login, everyone else lands on Start.
+
+| Section | Pages |
+| --- | --- |
+| Home | Start · My shift |
+| Sales | Sell · Serve |
+| Stock | Branch stock (`/stock`) · Warehouse & kitchens (`/store`; "My kitchen" or "Warehouse" for those staff) · Low stock (`/alerts`) |
+| Items & recipes | Stock items (`/manager/items`: add, change, archive, delete) · Dish ingredients (`/manager/stock`) · Recipes · Suppliers (`/manager/suppliers`) |
+| Reports | Today · Reports · Food cost · Customers |
+| Settings | Staff · Roles · Places (`/manager/locations`: branches, kitchens, warehouse) |
+
+- A stock item can be added from where it is needed: the Purchases and Send tabs have "Add a new item", and it lands on the line straight away.
+- An item or supplier that was ever used is **archived** instead of deleted, so past records keep their names; "Show archived" brings it back.
+- Links between pages: Stock items ↔ Dish ingredients / Recipes; Purchases → Suppliers; Make food → Recipes; Low stock → that place's stock; `/store?location=…&tab=…` opens a place and tab directly.
+
 ## Walk-in flow
 
 1. **Cashier** (`/cashier`): picks items and takes payment by cash or MoMo prompt (Paystack). The API still supports a MoMo reference or card if the shop needs them later.
@@ -32,13 +49,13 @@ Warehouse ──raw──▶ Central kitchen ──prepared──▶ Satellite k
      └──────────────────raw─────────────────────────▲
 ```
 
-- **Kitchens** (`/manager/locations`, Admin):
+- **Places** (Settings → Places, `/manager/locations`, Admin):
   - rename the warehouse and the central kitchen
   - add satellite kitchens
   - pick which satellite supplies each branch
   - set the phones that get low-stock SMS for each place
 - **Staff:** a Kitchen head or Warehouse person is tied to their kitchen or the warehouse (POS → Staff → "Works at"). The General manager and the Admin pick any place on the screen.
-- **Kitchen / Warehouse screen** (`/store`; the menu says "Kitchen" or "Warehouse"):
+- **Warehouse & kitchens** (Stock → Warehouse & kitchens, `/store`; "My kitchen" or "Warehouse" for those staff):
   - **Incoming:** confirm deliveries, changing anything that arrived short.
   - **Make food** (kitchens): pick a recipe and the number of batches. The ingredients come off stock, the food made goes on, and its cost is updated.
   - **Send:** only along the allowed routes, which are:
@@ -57,6 +74,54 @@ Warehouse ──raw──▶ Central kitchen ──prepared──▶ Satellite k
   - SMS go to the place's alert phones and to `ALERT_PHONES` / `OWNER_PHONES` (POS env, comma-separated), right after POS sales and stock actions.
   - A daily summary goes out at 20:00 (`/api/pos/cron/daily`, Vercel Cron). It needs `CRON_SECRET` set in the POS Vercel project.
 - Module 2's single kitchen became the first satellite kitchen. Every branch is supplied by it until reassigned.
+
+## Reports & owner dashboard (Module 4)
+
+**Reports** (`/manager/reports`) is for anyone whose role has **Sales reports** (`reports`). Walk-in and online sales are always counted together. They come from the `sales_unified` view.
+
+- **Filters:**
+  - **Dates:** Today, Yesterday, This week (from Monday), This month, Last month, or pick dates (up to one year).
+  - **Branch:** All branches or one branch. Only people who work across branches (Admin, General manager) get this choice. Everyone else always sees their own branch, and the server enforces this too.
+  - **Sales:** walk-in and online, walk-in only, or online only.
+  - **Payment:** Cash, MoMo or Card.
+  - **Staff:** one person. Sales are then only the walk-in sales they took, because online orders have no cashier.
+  - The filters are kept in the page address, so a report can be bookmarked or shared with someone who has access.
+- **Tabs:**
+  - **Overview:**
+    - total sales against the previous period of the same length
+    - orders and average order
+    - walk-in vs online
+    - bar charts: sales over time (by day, week or month) and sales by branch
+    - sales by hour, to plan cooking and staff
+    - donuts: walk-in vs online, payment methods, sales by category
+    - **food cost %** of what was sold, only for people with **See costs** (`food_cost`)
+  - **Dishes:**
+    - best and slow sellers
+    - dishes on the menu that **did not sell at all**
+    - every dish with walk-in and online quantities
+    - sales by category
+  - **Stock** (branches):
+    - for each item: sent from the kitchen, received, sold, returned (voids / cancelled orders), wasted, count differences, and what was **left** at the end of the last day
+    - every delivery route (warehouse → kitchens → branches) with deliveries that were short or are not confirmed yet
+    - the short deliveries
+  - **Cash & payments:**
+    - Cash / MoMo / Card totals, split into walk-in and online
+    - every cashier shift with float, expected, counted and the difference
+    - total cash short and over
+  - **Staff:**
+    - sales per cashier (with average, voids, shortages)
+    - tickets and items per server
+    - every void, with who approved it and why
+- **Downloads** need **Download data** (`export`):
+  - **Excel:** one sheet per section, plus every sale.
+  - **PDF / Print:** opens an A4 report with every section and the print dialog. Choose "Save as PDF" to get a PDF.
+- **Business day:** Ghana time is UTC. A sale's day is its business date, and its hour is the Ghana hour.
+- **No database changes:** Module 4 only reads existing tables, so there is no SQL to run.
+- **Code:**
+  - `src/lib/reportData.js` builds the report and pages through Supabase's 1,000-row limit.
+  - `api/pos/reports/dashboard` and `api/pos/reports/export` serve it.
+  - `components/Charts.jsx` has the charts (plain SVG and HTML, no chart library).
+  - `components/ReportSections.jsx` has the tabs, shared by the dashboard and the print page.
 
 ## Roles & permissions
 
@@ -89,7 +154,7 @@ One login per person (username + PIN) for the POS **and** the website's staff pa
   - **Stock now**, with low and out badges.
   - **Closing count.** Leftovers carry over to the next day, and any difference is recorded.
   - **Managers only:** waste and corrections (a reason is required), and the full history.
-- **What each dish uses** (`/manager/stock`): stock items, and links from each dish to what it uses.
+- **Dish ingredients** (Items & recipes → Dish ingredients, `/manager/stock`): what one plate of each dish uses. Stock items themselves are on Items & recipes → Stock items.
   - Example: Assorted Fried Rice = 1 fried-rice base + 1 chicken + 1 sausage.
   - **Link dishes automatically** links every untracked dish 1:1 to a stock item with the same name.
   - Quantities can be fractions, matching the kitchen's portion sheet: 3 scoops rice + 5 eggs + 0.2 can beef; 0.33 pack spaghetti.
