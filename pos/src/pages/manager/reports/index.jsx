@@ -67,12 +67,18 @@ export default function Reports() {
     }
   }
 
+  // Depends on "signed in" (true/false), not on `me` itself: useMe re-checks the
+  // login after every address change and returns a new object, which would
+  // reload the report, change the address again … and flash for ever.
+  const signedIn = Boolean(me)
   useEffect(() => {
-    if (!me || !query) return
+    if (!signedIn || !query) return
     const keep = Object.fromEntries(Object.entries(f).filter(([k, v]) => v && v !== DEFAULTS[k] && (f.period === 'custom' || !['from', 'to'].includes(k))))
-    router.replace({ pathname: router.pathname, query: { ...keep, ...(tab !== 'overview' ? { tab } : {}) } }, undefined, { shallow: true })
+    const next = { ...keep, ...(tab !== 'overview' ? { tab } : {}) }
+    const same = JSON.stringify(next) === JSON.stringify(Object.fromEntries(Object.entries(router.query).map(([k, v]) => [k, String(v)])))
+    if (!same) router.replace({ pathname: router.pathname, query: next }, undefined, { shallow: true })
     load()
-  }, [me, query]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [signedIn, query]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function pickTab(k) {
     setTab(k)
