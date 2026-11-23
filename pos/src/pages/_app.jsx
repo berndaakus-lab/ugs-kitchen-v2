@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import Head from 'next/head'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import '@/lib/installPrompt'
 import '@/styles/globals.css'
 
 export default function App({ Component, pageProps }) {
