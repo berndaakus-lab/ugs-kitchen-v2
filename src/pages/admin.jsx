@@ -48,7 +48,14 @@ function formatDate(ts) {
 }
 
 // ── Export helpers ────────────────────────────────────────────
-function ordersToRows(orders, branchName = '') {
+// Order times are stored in UTC, which is Ghana time (GMT). The end is exclusive:
+// the minute after the chosen one, so orders late in that minute are included.
+const exportStart = (date, time) => `${date}T${time || '00:00'}:00Z`
+const exportEnd = (date, time) =>
+  new Date(new Date(`${date}T${time || '23:59'}:00Z`).getTime() + 60000).toISOString()
+
+function ordersToRows(orders, branches = []) {
+  const branchNames = Object.fromEntries(branches.map(b => [b.id, b.name]))
   return orders.map(o => ({
     'Order ID':      `#${String(o.id).slice(-6).toUpperCase()}`,
     'Date':          new Date(o.created_at).toLocaleDateString('en-GH'),
@@ -61,7 +68,7 @@ function ordersToRows(orders, branchName = '') {
     'Status':        o.status,
     'Channel':       o.payment_channel ?? '',
     'Payment Problem': o.payment_failure_reason ?? '',
-    'Branch':        branchName || o.branch_id || '',
+    'Branch':        branchNames[o.branch_id] ?? o.branch_id ?? '',
     'Delivered By':  o.delivered_by ?? '',
     'Delivered At':  o.delivered_at ? new Date(o.delivered_at).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' }) : '',
     'Actioned By':   o.actioned_by ?? '',
@@ -840,6 +847,9 @@ export default function AdminPage() {
   const [exporting,     setExporting]     = useState(false)
   const [exportFrom,    setExportFrom]    = useState('')
   const [exportTo,      setExportTo]      = useState('')
+  const [exportFromTime, setExportFromTime] = useState('')
+  const [exportToTime,   setExportToTime]   = useState('')
+  const [exportBranch,   setExportBranch]   = useState('all')
   const exportRef = useRef(null)
 
   // Close export dropdown on outside click
@@ -852,54 +862,63 @@ export default function AdminPage() {
   }, [])
 
   async function handleExport(type) {
+    let start = null, end = null, period = 'ALL', empty = 'No orders found.'
+
+    if (type === 'day') {
+      start = exportStart(activeDate)
+      end = exportEnd(activeDate)
+      period = activeDate
+      empty = 'No orders for this day.'
+    } else if (type === 'month') {
+      const [y, m] = activeDate.split('-')
+      const lastDay = String(new Date(y, m, 0).getDate()).padStart(2, '0')
+      start = exportStart(`${y}-${m}-01`)
+      end = exportEnd(`${y}-${m}-${lastDay}`)
+      period = `${y}-${m}`
+      empty = 'No orders for this month.'
+    } else if (type === 'range') {
+      if (!exportFrom || !exportTo) { alert('Please select both a start and end date.'); return }
+      start = exportStart(exportFrom, exportFromTime)
+      end = exportEnd(exportTo, exportToTime)
+      if (new Date(start) >= new Date(end)) { alert('The start must be before the end.'); return }
+      const stamp = (d, t) => t ? `${d}_${t.replace(':', '')}` : d
+      period = `${stamp(exportFrom, exportFromTime)}_to_${stamp(exportTo, exportToTime)}`
+      empty = 'No orders in this range.'
+    }
+
     setExportOpen(false)
     setExporting(true)
 
-    const branchLabel = branches.find(b => b.id === (currentUser?.branch_id || branchFilter))?.name ?? ''
+    // Staff tied to a branch always export that branch.
+    const branchId = currentUser?.branch_id || (exportBranch !== 'all' ? exportBranch : null)
+    const branchName = branchId ? branches.find(b => b.id === branchId)?.name : null
+    const branchPart = branchName ? `${branchName.replace(/[^a-z0-9]+/gi, '-')}_` : branchId ? '' : 'All-Branches_'
 
-    async function fetchRange(start, end) {
-      let query = adminDb
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false })
-      if (start) query = query.gte('created_at', start)
-      if (end)   query = query.lte('created_at', end)
-      const staffBranch = currentUser?.branch_id
-      if (staffBranch) query = query.eq('branch_id', staffBranch)
-      else if (branchFilter !== 'all') query = query.eq('branch_id', branchFilter)
-      const { data } = await query
-      return data ?? []
+    try {
+      // The database returns a limited number of rows at a time, so read page by page.
+      const all = []
+      while (true) {
+        let query = adminDb
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(all.length, all.length + 999)
+        if (start) query = query.gte('created_at', start)
+        if (end)   query = query.lt('created_at', end)
+        if (branchId) query = query.eq('branch_id', branchId)
+        const { data, error } = await query
+        if (error) throw new Error(error.message)
+        if (!data?.length) break
+        all.push(...data)
+      }
+      if (!all.length) alert(empty)
+      else downloadExcel(ordersToRows(all, branches), `UGs_Orders_${branchPart}${period}.xlsx`)
+    } catch (err) {
+      alert(`Export failed: ${err.message}`)
+    } finally {
+      setExporting(false)
     }
-
-    if (type === 'day') {
-      const rows = ordersToRows(orders, branchLabel)
-      if (!rows.length) { alert('No orders for this day.'); setExporting(false); return }
-      downloadExcel(rows, `UGs_Orders_${selectedDate}.xlsx`)
-
-    } else if (type === 'month') {
-      const [y, m] = selectedDate.split('-')
-      const lastDay = new Date(y, m, 0).getDate()
-      const data = await fetchRange(`${y}-${m}-01T00:00:00Z`, `${y}-${m}-${String(lastDay).padStart(2,'0')}T23:59:59Z`)
-      const rows = ordersToRows(data, branchLabel)
-      if (!rows.length) { alert('No orders for this month.'); setExporting(false); return }
-      downloadExcel(rows, `UGs_Orders_${y}-${m}.xlsx`)
-
-    } else if (type === 'range') {
-      if (!exportFrom || !exportTo) { alert('Please select both a start and end date.'); setExporting(false); return }
-      if (exportFrom > exportTo)    { alert('Start date must be before end date.');      setExporting(false); return }
-      const data = await fetchRange(`${exportFrom}T00:00:00Z`, `${exportTo}T23:59:59Z`)
-      const rows = ordersToRows(data, branchLabel)
-      if (!rows.length) { alert('No orders in this date range.'); setExporting(false); return }
-      downloadExcel(rows, `UGs_Orders_${exportFrom}_to_${exportTo}.xlsx`)
-
-    } else if (type === 'all') {
-      const data = await fetchRange(null, null)
-      const rows = ordersToRows(data, branchLabel)
-      if (!rows.length) { alert('No orders found.'); setExporting(false); return }
-      downloadExcel(rows, `UGs_Orders_ALL.xlsx`)
-    }
-
-    setExporting(false)
   }
 
   // Load branches once on login
@@ -1446,7 +1465,7 @@ export default function AdminPage() {
             {may('export') && (
               <div className="relative flex-shrink-0" ref={exportRef}>
                 <button
-                  onClick={() => setExportOpen(o => !o)}
+                  onClick={() => { if (!exportOpen) setExportBranch(branchFilter); setExportOpen(o => !o) }}
                   disabled={exporting}
                   className="flex items-center gap-1.5 px-3 py-2.5 bg-white border-2 border-gray-200 text-brand-dark font-bold text-sm rounded-xl active:bg-gray-50 disabled:opacity-50"
                   title="Export report"
@@ -1459,8 +1478,29 @@ export default function AdminPage() {
                 </button>
 
                 {exportOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-brand-muted z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[80vh] overflow-y-auto bg-white rounded-2xl shadow-xl border border-brand-muted z-50">
                     <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400 px-4 pt-3 pb-1">Export as Excel</p>
+
+                    {/* Branch applies to every export option below */}
+                    <div className="px-4 pt-1 pb-3">
+                      <label htmlFor="export-branch" className="block text-xs font-bold text-brand-dark mb-1">Branch</label>
+                      {currentUser?.branch_id ? (
+                        <p id="export-branch" className="border border-gray-200 rounded-lg px-2 py-2 text-xs font-semibold bg-gray-50 text-gray-500">
+                          {branches.find(b => b.id === currentUser.branch_id)?.name ?? 'Your Branch'}
+                        </p>
+                      ) : (
+                        <select
+                          id="export-branch"
+                          value={exportBranch}
+                          onChange={e => setExportBranch(e.target.value)}
+                          className="w-full border border-gray-200 rounded-lg px-2 py-2 text-xs font-semibold bg-white outline-none focus:border-brand-orange"
+                        >
+                          <option value="all">All branches</option>
+                          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    <div className="border-t border-gray-100" />
 
                     <button
                       onClick={() => handleExport('day')}
@@ -1489,23 +1529,41 @@ export default function AdminPage() {
                     {/* Custom date range */}
                     <div className="px-4 py-3 space-y-2">
                       <p className="text-xs font-bold text-brand-dark flex items-center gap-1.5">
-                        <FileSpreadsheet size={14} className="text-brand-orange" /> Custom Date Range
+                        <FileSpreadsheet size={14} className="text-brand-orange" /> Custom Date &amp; Time Range
                       </p>
-                      <div className="flex gap-2 items-center">
+                      <div className="grid grid-cols-[2.5rem_1fr_6.5rem] gap-1.5 items-center">
+                        <span className="text-xs text-gray-400">From</span>
                         <input
                           type="date"
+                          aria-label="From date"
                           value={exportFrom}
                           onChange={e => setExportFrom(e.target.value)}
-                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-brand-orange"
+                          className="min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-brand-orange"
                         />
-                        <span className="text-xs text-gray-400 flex-shrink-0">to</span>
+                        <input
+                          type="time"
+                          aria-label="From time"
+                          value={exportFromTime}
+                          onChange={e => setExportFromTime(e.target.value)}
+                          className="min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-brand-orange"
+                        />
+                        <span className="text-xs text-gray-400">To</span>
                         <input
                           type="date"
+                          aria-label="To date"
                           value={exportTo}
                           onChange={e => setExportTo(e.target.value)}
-                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-brand-orange"
+                          className="min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-brand-orange"
+                        />
+                        <input
+                          type="time"
+                          aria-label="To time"
+                          value={exportToTime}
+                          onChange={e => setExportToTime(e.target.value)}
+                          className="min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-brand-orange"
                         />
                       </div>
+                      <p className="text-[10px] text-gray-400">Leave the times empty to include the whole day.</p>
                       <button
                         onClick={() => handleExport('range')}
                         className="w-full bg-brand-orange text-white text-xs font-extrabold rounded-lg py-2 active:bg-brand-brown transition-colors"
