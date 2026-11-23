@@ -54,6 +54,29 @@ const exportStart = (date, time) => `${date}T${time || '00:00'}:00Z`
 const exportEnd = (date, time) =>
   new Date(new Date(`${date}T${time || '23:59'}:00Z`).getTime() + 60000).toISOString()
 
+// The database returns a limited number of rows at a time, so read page by page.
+async function fetchOrdersInRange({ start, end, branchId }) {
+  const all = []
+  while (true) {
+    let query = adminDb
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(all.length, all.length + 999)
+    if (start) query = query.gte('created_at', start)
+    if (end)   query = query.lt('created_at', end)
+    if (branchId) query = query.eq('branch_id', branchId)
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    if (!data?.length) return all
+    all.push(...data)
+  }
+}
+
+const shortDate = date =>
+  new Date(`${date}T12:00:00`).toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric' })
+
 function ordersToRows(orders, branches = []) {
   const branchNames = Object.fromEntries(branches.map(b => [b.id, b.name]))
   return orders.map(o => ({
@@ -794,7 +817,14 @@ export default function AdminPage() {
   }, [currentUser])
   const [orders,         setOrders]         = useState([])
   const [loading,        setLoading]        = useState(true)
-  const [selectedDate,   setSelectedDate]   = useState(() => new Date().toISOString().split('T')[0])
+  const [selectedDate,   setSelectedDate]   = useState(() => new Date().toISOString().split('T')[0])   // the "From" date
+  const [viewTo,         setViewTo]         = useState(() => new Date().toISOString().split('T')[0])
+  const [viewFromTime,   setViewFromTime]   = useState('')
+  const [viewToTime,     setViewToTime]     = useState('')
+  const [ordersError,    setOrdersError]    = useState('')
+  const [visibleOrders,  setVisibleOrders]  = useState(100)
+  const ordersRequest = useRef(0)      // only the newest load may update the screen
+  const ordersCount   = useRef(0)
   const [selectedOrder,  setSelectedOrder]  = useState(null)
   const [refreshing,     setRefreshing]     = useState(false)
   const [statusFilter,   setStatusFilter]   = useState('all')
@@ -895,23 +925,7 @@ export default function AdminPage() {
     const branchPart = branchName ? `${branchName.replace(/[^a-z0-9]+/gi, '-')}_` : branchId ? '' : 'All-Branches_'
 
     try {
-      // The database returns a limited number of rows at a time, so read page by page.
-      const all = []
-      while (true) {
-        let query = adminDb
-          .from('orders')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .order('id', { ascending: false })
-          .range(all.length, all.length + 999)
-        if (start) query = query.gte('created_at', start)
-        if (end)   query = query.lt('created_at', end)
-        if (branchId) query = query.eq('branch_id', branchId)
-        const { data, error } = await query
-        if (error) throw new Error(error.message)
-        if (!data?.length) break
-        all.push(...data)
-      }
+      const all = await fetchOrdersInRange({ start, end, branchId })
       if (!all.length) alert(empty)
       else downloadExcel(ordersToRows(all, branches), `UGs_Orders_${branchPart}${period}.xlsx`)
     } catch (err) {
@@ -933,35 +947,56 @@ export default function AdminPage() {
   const todayGMT = new Date().toISOString().split('T')[0]
   const activeDate = isStaffOrDelivery ? todayGMT : selectedDate
 
-  const fetchOrders = useCallback(async () => {
-    setRefreshing(true)
-    const date  = !can(currentUser, 'reports')
-      ? new Date().toISOString().split('T')[0]
-      : selectedDate
-    const start = `${date}T00:00:00Z`
-    const end   = `${date}T23:59:59Z`
-
-    let query = adminDb
-      .from('orders')
-      .select('*')
-      .gte('created_at', start)
-      .lte('created_at', end)
-      .order('created_at', { ascending: false })
-
-    // Staff with an assigned branch: always lock to that branch
-    const staffBranch = currentUser?.branch_id
-    if (staffBranch) {
-      query = query.eq('branch_id', staffBranch)
-    } else if (branchFilter !== 'all') {
-      // Admin free-filtering by branch
-      query = query.eq('branch_id', branchFilter)
+  // The period shown on screen. Empty start/end means the filter isn't valid yet.
+  let viewStart = '', viewEnd = '', viewError = ''
+  if (isStaffOrDelivery) {
+    viewStart = exportStart(todayGMT)
+    viewEnd = exportEnd(todayGMT)
+  } else if (!selectedDate || !viewTo) {
+    viewError = 'Choose both a From and a To date.'
+  } else {
+    viewStart = exportStart(selectedDate, viewFromTime)
+    viewEnd = exportEnd(viewTo, viewToTime)
+    if (new Date(viewStart) >= new Date(viewEnd)) {
+      viewError = 'The From time must be before the To time.'
+      viewStart = viewEnd = ''
     }
+  }
 
-    const { data } = await query
-    setOrders(data ?? [])
-    setLoading(false)
-    setRefreshing(false)
-  }, [selectedDate, branchFilter, currentUser])
+  // New filter: clear the old list so it's never shown under the new period.
+  useEffect(() => {
+    setOrders([])
+    setOrdersError('')
+    setLoading(true)
+    setVisibleOrders(100)
+  }, [viewStart, viewEnd, branchFilter])
+
+  const fetchOrders = useCallback(async () => {
+    const request = ++ordersRequest.current
+    if (!viewStart) {
+      setOrders([])
+      setLoading(false)
+      setRefreshing(false)
+      return
+    }
+    setRefreshing(true)
+    try {
+      // Staff with an assigned branch are always locked to that branch.
+      const branchId = currentUser?.branch_id || (branchFilter !== 'all' ? branchFilter : null)
+      const data = await fetchOrdersInRange({ start: viewStart, end: viewEnd, branchId })
+      if (request !== ordersRequest.current) return
+      ordersCount.current = data.length
+      setOrders(data)
+      setOrdersError('')
+    } catch {
+      if (request === ordersRequest.current) setOrdersError('Could not load orders. Check your connection and refresh.')
+    } finally {
+      if (request === ordersRequest.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
+    }
+  }, [viewStart, viewEnd, branchFilter, currentUser])
 
   const fetchMenuItems = useCallback(async () => {
     setMenuLoading(true)
@@ -1012,10 +1047,13 @@ export default function AdminPage() {
     if (!currentUser) return
     const id = setInterval(() => {
       if (document.visibilityState !== 'visible') return
-      fetchOrders(); fetchReviews()
+      // A large period that has already ended won't get new orders; use Refresh.
+      const largeAndEnded = !isStaffOrDelivery && ordersCount.current > 1000 && viewEnd && new Date(viewEnd) <= new Date()
+      if (!largeAndEnded) fetchOrders()
+      fetchReviews()
     }, 15000)
     return () => clearInterval(id)
-  }, [currentUser, fetchOrders, fetchReviews])
+  }, [currentUser, fetchOrders, fetchReviews, isStaffOrDelivery, viewEnd])
 
   async function handleApproveReview(id, current) {
     await adminDb.from('reviews').update({ is_approved: !current }).eq('id', id)
@@ -1262,7 +1300,22 @@ export default function AdminPage() {
   const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'awaiting_payment')
   const failedOrders  = orders.filter(o => o.status === 'failed' || o.status === 'cancelled')
 
-  const isToday = selectedDate === new Date().toISOString().split('T')[0]
+  const isToday = isStaffOrDelivery ||
+    (selectedDate === todayGMT && viewTo === todayGMT && !viewFromTime && !viewToTime)
+  const sameDay = selectedDate === viewTo
+  const viewLabel = isToday ? 'Today'
+    : viewError ? '—'
+    : sameDay && !viewFromTime && !viewToTime ? shortDate(selectedDate)
+    : sameDay ? `${shortDate(selectedDate)}, ${viewFromTime || '00:00'} – ${viewToTime || '23:59'}`
+    : `${shortDate(selectedDate)}${viewFromTime ? ` ${viewFromTime}` : ''} – ${shortDate(viewTo)}${viewToTime ? ` ${viewToTime}` : ''}`
+
+  function resetViewToToday() {
+    const today = new Date().toISOString().split('T')[0]
+    setSelectedDate(today)
+    setViewTo(today)
+    setViewFromTime('')
+    setViewToTime('')
+  }
 
   return (
     <>
@@ -1435,37 +1488,55 @@ export default function AdminPage() {
           {activeTab === 'orders' && <>
 
           {/* Date picker + Export */}
-          <div className="flex items-center gap-2">
-            {/* Staff and delivery are locked to today — hide the date picker */}
+          <div className="flex items-start gap-2">
+            {/* Staff and delivery are locked to today — hide the date pickers */}
             {isStaffOrDelivery ? (
               <div className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-2.5 bg-gray-50 text-sm font-semibold text-gray-500 text-center">
                 📅 Today only
               </div>
             ) : (
-              <>
-                <div className="relative flex-1">
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={e => setSelectedDate(e.target.value)}
-                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 font-semibold text-sm outline-none focus:border-brand-orange appearance-none bg-white"
-                  />
-                </div>
-                {!isToday && (
-                  <button
-                    onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-                    className="px-3 py-2.5 bg-brand-brown text-white text-sm font-bold rounded-xl flex-shrink-0"
-                  >
-                    Today
-                  </button>
-                )}
-              </>
+              <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-2 gap-2">
+                {[
+                  ['From', selectedDate, viewFromTime, setViewFromTime, v => { setSelectedDate(v); if (v && viewTo && v > viewTo) setViewTo(v) }],
+                  ['To', viewTo, viewToTime, setViewToTime, v => { setViewTo(v); if (v && selectedDate && v < selectedDate) setSelectedDate(v) }],
+                ].map(([label, date, time, setTime, setDate]) => (
+                  <div key={label} className="grid grid-cols-[2.5rem_minmax(0,1fr)_6.5rem] gap-1.5 items-center">
+                    <span className="text-xs font-bold text-gray-500">{label}</span>
+                    <input
+                      type="date"
+                      aria-label={`View ${label} date`}
+                      value={date}
+                      onChange={e => setDate(e.target.value)}
+                      className="min-w-0 border-2 border-gray-200 rounded-xl px-2 py-2 font-semibold text-xs outline-none focus:border-brand-orange bg-white"
+                    />
+                    <input
+                      type="time"
+                      aria-label={`View ${label} time`}
+                      value={time}
+                      onChange={e => setTime(e.target.value)}
+                      className="min-w-0 border-2 border-gray-200 rounded-xl px-2 py-2 font-semibold text-xs outline-none focus:border-brand-orange bg-white"
+                    />
+                  </div>
+                ))}
+              </div>
             )}
             {/* Export button — needs Download data */}
             {may('export') && (
               <div className="relative flex-shrink-0" ref={exportRef}>
                 <button
-                  onClick={() => { if (!exportOpen) setExportBranch(branchFilter); setExportOpen(o => !o) }}
+                  onClick={() => {
+                    if (!exportOpen) {
+                      setExportBranch(branchFilter)
+                      // Start the custom range from what's on screen.
+                      if (!isStaffOrDelivery) {
+                        setExportFrom(selectedDate)
+                        setExportFromTime(viewFromTime)
+                        setExportTo(viewTo)
+                        setExportToTime(viewToTime)
+                      }
+                    }
+                    setExportOpen(o => !o)
+                  }}
                   disabled={exporting}
                   className="flex items-center gap-1.5 px-3 py-2.5 bg-white border-2 border-gray-200 text-brand-dark font-bold text-sm rounded-xl active:bg-gray-50 disabled:opacity-50"
                   title="Export report"
@@ -1594,6 +1665,22 @@ export default function AdminPage() {
             )}
           </div>
 
+          {!isStaffOrDelivery && (viewError || !isToday) && (
+            <div className="flex items-center justify-between gap-2">
+              <p className={`text-xs font-semibold ${viewError ? 'text-red-500' : 'text-gray-500'}`}>
+                {viewError || `Showing ${viewLabel}`}
+              </p>
+              {!isToday && (
+                <button
+                  onClick={resetViewToToday}
+                  className="px-3 py-1.5 bg-brand-brown text-white text-xs font-bold rounded-xl flex-shrink-0"
+                >
+                  Today
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Branch filter — admin sees switcher; staff sees their locked branch label */}
           {currentUser?.branch_id ? (
             <div className="flex items-center gap-2">
@@ -1630,7 +1717,7 @@ export default function AdminPage() {
               icon={<ShoppingBag size={18} />}
               label="Total Orders"
               value={orders.length}
-              sub={isToday ? 'Today' : formatDate(selectedDate + 'T00:00:00')}
+              sub={viewLabel}
               color="orange"
             />
             <StatCard
@@ -1673,6 +1760,10 @@ export default function AdminPage() {
             ))}
           </div>
 
+          {ordersError && (
+            <p role="alert" className="bg-red-50 text-red-600 text-sm font-semibold rounded-xl px-4 py-3">{ordersError}</p>
+          )}
+
           {/* Orders list */}
           {loading ? (
             <div className="space-y-3">
@@ -1681,13 +1772,15 @@ export default function AdminPage() {
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-16">
-              <ShoppingBag size={40} className="text-gray-200 mx-auto mb-3" />
-              <p className="text-gray-400 font-semibold">No orders for this day</p>
-            </div>
+            !ordersError && !viewError && (
+              <div className="text-center py-16">
+                <ShoppingBag size={40} className="text-gray-200 mx-auto mb-3" />
+                <p className="text-gray-400 font-semibold">No orders for this period</p>
+              </div>
+            )
           ) : (
             <div className="space-y-3">
-              {filtered.map(order => (
+              {filtered.slice(0, visibleOrders).map(order => (
                 <button
                   key={order.id}
                   onClick={() => setSelectedOrder(order)}
@@ -1704,7 +1797,9 @@ export default function AdminPage() {
                         </span>
                       </div>
                       <p className="font-semibold text-sm text-brand-dark truncate">{order.customer_name}</p>
-                      <p className="text-xs text-gray-400">{order.delivery_location} · {formatTime(order.created_at)}</p>
+                      <p className="text-xs text-gray-400">
+                        {order.delivery_location} · {!isStaffOrDelivery && !sameDay ? `${formatDate(order.created_at)} · ` : ''}{formatTime(order.created_at)}
+                      </p>
                       <p className="text-xs text-gray-500 mt-1">
                         {order.items?.length} item{order.items?.length !== 1 ? 's' : ''} ·{' '}
                         {order.items?.map(i => i.name).join(', ').slice(0, 40)}
@@ -1718,6 +1813,14 @@ export default function AdminPage() {
                   </div>
                 </button>
               ))}
+              {filtered.length > visibleOrders && (
+                <button
+                  onClick={() => setVisibleOrders(n => n + 100)}
+                  className="w-full bg-white border-2 border-gray-200 text-brand-dark text-sm font-bold rounded-xl py-3"
+                >
+                  Show more ({filtered.length - visibleOrders} left)
+                </button>
+              )}
             </div>
           )}
 
