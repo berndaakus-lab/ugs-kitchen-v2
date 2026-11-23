@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/router'
 import { api, homeFor } from '@/lib/client'
 import { ErrorText } from '@/components/Layout'
+import InstallApp from '@/components/InstallApp'
 
 export default function Login() {
   const router = useRouter()
@@ -32,7 +33,9 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-brand-dark p-4">
-      <form onSubmit={submit} className="card w-full max-w-sm space-y-4">
+      <div className="w-full max-w-sm space-y-3">
+      <InstallApp />
+      <form onSubmit={submit} className="card w-full space-y-4">
         <div className="text-center">
           <div className="text-2xl font-black text-brand-orange">UGs Kitchen POS</div>
           <div className="text-sm text-gray-500">Staff sign in</div>
@@ -67,6 +70,7 @@ export default function Login() {
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+      </div>
     </div>
   )
 }
